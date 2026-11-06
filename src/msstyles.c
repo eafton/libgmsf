@@ -61,7 +61,7 @@ static guint8 *dib_to_bmp(const guint8 *data, gsize size, gsize *out_size) {
         return NULL;
 	}
 	
-    header_size = read_le16(bytes);
+    header_size = read_le32(bytes);
     bit_count = read_le16(bytes + 14);
     compression = read_le32(bytes + 16);
     clr_used = read_le32(bytes + 32);
@@ -244,7 +244,6 @@ static void select_scheme_ini(GMSFStyles *styles) {
 	}
 	g_strfreev(test);
 	
-#if 0
 	extracted = _pe_extract_resource(&styles->priv->ctx, styles->priv->res, "BLUE_RADIOBUTTON25_BMP", NULL, &sz, &free);
 	pixbuf = load_bitmap(extracted, sz);
 	gdk_pixbuf_save(pixbuf, "test.png", "png", NULL, NULL);
@@ -252,7 +251,6 @@ static void select_scheme_ini(GMSFStyles *styles) {
 	if (free) {
 		g_free(extracted);
 	}
-#endif
 }
 
 static void _finalize(GObject *object) {
