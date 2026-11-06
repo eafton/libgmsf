@@ -26,14 +26,12 @@ typedef guint32 GMSFColor;
 #define GMSF_IS_STYLES_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), GMSF_TYPE_STYLES))
 #define GMSF_STYLES_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj), GMSF_TYPE_STYLES, GMSFStylesClass))
 
-typedef struct _GMSFSize
-{
+typedef struct _GMSFSize {
     gint width;
     gint height;
 } GMSFSize;
 
-typedef struct _GMSFRectangle
-{
+typedef struct _GMSFRectangle {
     gint x;
     gint y;
     gint width;
@@ -78,14 +76,14 @@ typedef struct _GMSFThemePartInfo {
     GMSFThemeImageType  bg_type;
     GMSFThemeSizingType sizing_type;
 
-    // Metrics
+    /* Metrics */
     GMSFSize      min_size;
     GMSFSize      normal_size;
     gint          border_size;
     GMSFRectangle sizing_margins;
     GMSFRectangle content_margins;
 
-    // Color/Fill
+    /* Color/Fill */
     GMSFThemeFillType fill_type;
     GMSFColor         fill_color;
     GMSFColor         border_color;
@@ -93,7 +91,7 @@ typedef struct _GMSFThemePartInfo {
     gint              gradient_n_stops;
     GMSFColor*        gradient_stops;
 
-    // Images
+    /* Images */
     GdkPixbuf* bg_image;
     GdkPixbuf* glyph_image;
 } GMSFThemePartInfo;
