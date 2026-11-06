@@ -1,3 +1,4 @@
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib-object.h>
 #include <gmsf-export.h>
 
@@ -40,6 +41,23 @@ typedef struct _GMSFRectangle
 } GMSFRectangle;
 
 typedef enum {
+    GMSF_THEME_PART_IMAGE_BACKGROUND,
+    GMSF_THEME_PART_IMAGE_GLYPH
+} GMSFThemePartImage;
+
+typedef enum {
+    GMSF_THEME_PART_STATE_NONE     = 0x0,
+    GMSF_THEME_PART_STATE_HILITE   = 0x1,
+    GMSF_THEME_PART_STATE_ACTIVE   = 0x2,
+    GMSF_THEME_PART_STATE_DEFAULT  = 0x4,
+    GMSF_THEME_PART_STATE_DISABLED = 0x8,
+
+    GMSF_THEME_PART_STATE_UNCHECKED = 0x10,
+    GMSF_THEME_PART_STATE_CHECKED   = 0x20,
+    GMSF_THEME_PART_STATE_MIXED     = 0x40
+} GMSFThemePartState;
+
+typedef enum {
     GMSF_THEME_IMAGE_TYPE_BORDER_FILL,
     GMSF_THEME_IMAGE_TYPE_IMAGE_FILE
 } GMSFThemeImageType;
@@ -57,9 +75,8 @@ typedef enum {
 } GMSFThemeFillType;
 
 typedef struct _GMSFThemePartInfo {
-    GMSFThemeImageType  bgtype;
+    GMSFThemeImageType  bg_type;
     GMSFThemeSizingType sizing_type;
-    gboolean            has_glyph;
 
     // Metrics
     GMSFSize      min_size;
@@ -72,6 +89,13 @@ typedef struct _GMSFThemePartInfo {
     GMSFThemeFillType fill_type;
     GMSFColor         fill_color;
     GMSFColor         border_color;
+    GMSFColor         text_color;
+    gint              gradient_n_stops;
+    GMSFColor*        gradient_stops;
+
+    // Images
+    GdkPixbuf* bg_image;
+    GdkPixbuf* glyph_image;
 } GMSFThemePartInfo;
 
 typedef struct _GMSFStyles GMSFStyles;
@@ -106,6 +130,7 @@ GMSF_EXPORT GMSFStyles *gmsf_styles_new_from_file(const gchar *filename);
 GMSF_EXPORT guint gmsf_styles_get_version(GMSFStyles *styles);
 GMSF_EXPORT guint gmsf_styles_get_target_dpi(GMSFStyles *styles);
 GMSF_EXPORT void gmsf_styles_set_target_dpi(GMSFStyles *styles, guint dpi);
+GMSF_EXPORT void gmsf_styles_get_part_info(GMSFStyles *styles, const gchar *part, GMSFThemePartState state, GMSFThemePartInfo *info);
 GMSF_EXPORT const gchar **gmsf_styles_get_color_schemes(GMSFStyles *styles);
 GMSF_EXPORT const gchar **gmsf_styles_get_size_schemes(GMSFStyles *styles);
 GMSF_EXPORT void gmsf_styles_get_color_scheme_info(GMSFStyles *styles, const gchar *scheme, gchar **display_name, gchar **tooltip);
