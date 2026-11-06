@@ -41,6 +41,8 @@ struct _GMSFStylesClass {
 GMSF_EXPORT GType gmsf_styles_get_type(void) G_GNUC_CONST;
 GMSF_EXPORT GMSFStyles *gmsf_styles_new_from_file(const gchar *filename);
 GMSF_EXPORT guint gmsf_styles_get_version(GMSFStyles *styles);
+GMSF_EXPORT guint gmsf_styles_get_target_dpi(GMSFStyles *styles);
+GMSF_EXPORT void gmsf_styles_set_target_dpi(GMSFStyles *styles, guint dpi);
 GMSF_EXPORT const gchar **gmsf_styles_get_color_schemes(GMSFStyles *styles);
 GMSF_EXPORT const gchar **gmsf_styles_get_size_schemes(GMSFStyles *styles);
 GMSF_EXPORT void gmsf_styles_select_scheme(GMSFStyles *styles, const gchar *color, const gchar *size);

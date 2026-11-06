@@ -9,6 +9,8 @@ struct _GMSFStylesPrivate {
 	pe_resources_t *res;	
 	gchar *filename;
 		
+	guint target_dpi;
+	
 	guint version;
 	gchar **color_schemes;
 	gchar **size_schemes;
@@ -26,7 +28,8 @@ enum {
 	PROP_COLOR_SCHEMES,
 	PROP_SIZE_SCHEMES,
 	PROP_SELECTED_COLOR_SCHEME,
-	PROP_SELECTED_SIZE_SCHEME
+	PROP_SELECTED_SIZE_SCHEME,
+	PROP_TARGET_DPI
 };
 
 G_DEFINE_TYPE(GMSFStyles, gmsf_styles, G_TYPE_OBJECT)
@@ -384,6 +387,9 @@ static void _set_property(GObject *object, guint prop_id, const GValue *value, G
 			g_strfreev(styles->priv->size_schemes);
 			styles->priv->size_schemes = g_strdupv(g_value_get_boxed(value)); 
 			break;
+		case PROP_TARGET_DPI:
+			styles->priv->target_dpi = g_value_get_uint(value);
+			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -400,6 +406,9 @@ static void _get_property(GObject *object, guint prop_id, GValue *value, GParamS
 			break;
 		case PROP_VERSION:
 			g_value_set_uint(value, styles->priv->version);
+			break;
+		case PROP_TARGET_DPI:
+			g_value_set_uint(value, styles->priv->target_dpi);
 			break;
 		case PROP_COLOR_SCHEMES:
 			g_value_set_boxed(value, styles->priv->color_schemes);
@@ -435,12 +444,14 @@ static void gmsf_styles_class_init(GMSFStylesClass *klass) {
     g_object_class_install_property(g_class, PROP_SIZE_SCHEMES, g_param_spec_boxed("size-schemes", "nick", "blurb", G_TYPE_STRV, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
     g_object_class_install_property(g_class, PROP_SELECTED_COLOR_SCHEME, g_param_spec_string("selected-color-scheme", "nick", "blurb", NULL, G_PARAM_READWRITE));
     g_object_class_install_property(g_class, PROP_SELECTED_SIZE_SCHEME, g_param_spec_string("selected-size-scheme", "nick", "blurb", NULL, G_PARAM_READWRITE));
+    g_object_class_install_property(g_class, PROP_TARGET_DPI, g_param_spec_uint("target-dpi", "nick", "blurb", 0, 96, G_MAXUINT, G_PARAM_READWRITE));
 
 	g_type_class_add_private(klass, sizeof(GMSFStylesPrivate));
 }	
 
 static void gmsf_styles_init(GMSFStyles *styles) {
 	styles->priv = G_TYPE_INSTANCE_GET_PRIVATE(styles, GMSF_TYPE_STYLES, GMSFStylesPrivate);
+	styles->priv->target_dpi = 96;
 	styles->priv->selectedini = NULL;
 }
 
@@ -466,4 +477,13 @@ void gmsf_styles_select_scheme(GMSFStyles *styles, const gchar *color, const gch
 	g_object_notify(G_OBJECT(styles), "selected-color-scheme");
 	g_object_notify(G_OBJECT(styles), "selected-size-scheme");
 	select_scheme_ini(styles);
+}
+
+guint gmsf_styles_get_target_dpi(GMSFStyles *styles) {
+	return styles->priv->target_dpi;
+}
+
+void gmsf_styles_set_target_dpi(GMSFStyles *styles, guint dpi) {
+	styles->priv->target_dpi = dpi;
+	g_object_notify(G_OBJECT(styles), "target-dpi");
 }

@@ -8,7 +8,6 @@ typedef struct {
 	gdouble alpha;
 } FakeRGBA;
 
-
 int main(int argc, char **argv) { 
 	GMSFStyles *styles;
 	GMSFColor color;
