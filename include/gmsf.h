@@ -29,6 +29,20 @@ typedef struct _GMSFStyles GMSFStyles;
 typedef struct _GMSFStylesClass GMSFStylesClass;
 typedef struct _GMSFStylesPrivate GMSFStylesPrivate;
 
+typedef struct {
+	gchar *display_name;
+	gchar *last_updated;
+	gchar *tooltip;
+	gchar *author;
+	gchar *company;
+	gchar *copyright;
+	gchar *url;
+	gchar *version;
+	gchar *description;
+	gchar *theme_name;
+	gchar *wmp_skin;	
+} GMSFStylesDocumentation;
+
 struct _GMSFStyles {
 	GObject parent_instance;
 	GMSFStylesPrivate *priv;
@@ -45,7 +59,11 @@ GMSF_EXPORT guint gmsf_styles_get_target_dpi(GMSFStyles *styles);
 GMSF_EXPORT void gmsf_styles_set_target_dpi(GMSFStyles *styles, guint dpi);
 GMSF_EXPORT const gchar **gmsf_styles_get_color_schemes(GMSFStyles *styles);
 GMSF_EXPORT const gchar **gmsf_styles_get_size_schemes(GMSFStyles *styles);
+GMSF_EXPORT void gmsf_styles_get_color_scheme_info(GMSFStyles *styles, const gchar *scheme, gchar **display_name, gchar **tooltip);
+GMSF_EXPORT void gmsf_styles_get_size_scheme_info(GMSFStyles *styles, const gchar *scheme, gchar **display_name, gchar **tooltip);
 GMSF_EXPORT void gmsf_styles_select_scheme(GMSFStyles *styles, const gchar *color, const gchar *size);
+GMSF_EXPORT void gmsf_styles_get_documentation(GMSFStyles *styles, GMSFStylesDocumentation *to_fill);
+GMSF_EXPORT void gmsf_styles_documentation_free_fields(GMSFStylesDocumentation *doc);
 
 G_END_DECLS
 

@@ -241,6 +241,7 @@ static void select_scheme_ini(GMSFStyles *styles) {
 		g_free(extracted);
 	}
 
+#if 0
 	test = g_key_file_get_groups(styles->priv->selectedini, NULL);
 	for (i = 0; test[i]; i++) {
 		puts(test[i]);
@@ -254,6 +255,7 @@ static void select_scheme_ini(GMSFStyles *styles) {
 	if (free) {
 		g_free(extracted);
 	}
+#endif
 }
 
 static void _finalize(GObject *object) {
@@ -486,4 +488,54 @@ guint gmsf_styles_get_target_dpi(GMSFStyles *styles) {
 void gmsf_styles_set_target_dpi(GMSFStyles *styles, guint dpi) {
 	styles->priv->target_dpi = dpi;
 	g_object_notify(G_OBJECT(styles), "target-dpi");
+}
+
+void _get_scheme_info(GMSFStyles *styles, const gchar *prefix, const gchar *scheme,  gchar **display_name, gchar **tooltip) {
+	gchar *sectionname;
+	
+	sectionname = g_strconcat(prefix, scheme, NULL);
+	if (display_name) {
+		*display_name = g_key_file_get_string(styles->priv->themesini, sectionname, "DisplayName", NULL);
+	}
+	if (tooltip) {
+		*tooltip = g_key_file_get_string(styles->priv->themesini, sectionname, "ToolTip", NULL);
+	}
+	g_free(sectionname);
+}
+
+
+void gmsf_styles_get_color_scheme_info(GMSFStyles *styles, const gchar *scheme,  gchar **display_name, gchar **tooltip) {
+	_get_scheme_info(styles, "ColorScheme.", scheme, display_name, tooltip);
+}
+
+void gmsf_styles_get_size_scheme_info(GMSFStyles *styles, const gchar *scheme, gchar **display_name, gchar **tooltip) {
+	_get_scheme_info(styles, "Size.", scheme, display_name, tooltip);
+}
+
+void gmsf_styles_get_documentation(GMSFStyles *styles, GMSFStylesDocumentation *to_fill) {
+	to_fill->display_name = g_key_file_get_string(styles->priv->themesini, "documentation", "DisplayName", NULL);
+	to_fill->tooltip = g_key_file_get_string(styles->priv->themesini, "documentation", "ToolTip", NULL);
+	to_fill->author = g_key_file_get_string(styles->priv->themesini, "documentation", "Author", NULL);
+	to_fill->company = g_key_file_get_string(styles->priv->themesini, "documentation", "Company", NULL);
+	to_fill->copyright = g_key_file_get_string(styles->priv->themesini, "documentation", "Copyright", NULL);
+	to_fill->url = g_key_file_get_string(styles->priv->themesini, "documentation", "URL", NULL);
+	to_fill->version = g_key_file_get_string(styles->priv->themesini, "documentation", "Version", NULL);
+	to_fill->description = g_key_file_get_string(styles->priv->themesini, "documentation", "Description", NULL);
+	to_fill->theme_name = g_key_file_get_string(styles->priv->themesini, "documentation", "ThemeName", NULL);
+	to_fill->wmp_skin = g_key_file_get_string(styles->priv->themesini, "documentation", "WmpSkinName", NULL);
+	to_fill->last_updated = g_key_file_get_string(styles->priv->themesini, "documentation", "LastUpdated", NULL);
+}
+
+void gmsf_styles_documentation_free_fields(GMSFStylesDocumentation *doc) {
+	g_free(doc->display_name);
+	g_free(doc->tooltip);
+	g_free(doc->author);
+	g_free(doc->company);
+	g_free(doc->copyright);
+	g_free(doc->url);
+	g_free(doc->version);
+	g_free(doc->description);
+	g_free(doc->theme_name);
+	g_free(doc->wmp_skin);
+	g_free(doc->last_updated);
 }
