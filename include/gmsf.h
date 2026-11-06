@@ -25,6 +25,55 @@ typedef guint32 GMSFColor;
 #define GMSF_IS_STYLES_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), GMSF_TYPE_STYLES))
 #define GMSF_STYLES_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj), GMSF_TYPE_STYLES, GMSFStylesClass))
 
+typedef struct _GMSFSize
+{
+    gint width;
+    gint height;
+} GMSFSize;
+
+typedef struct _GMSFRectangle
+{
+    gint x;
+    gint y;
+    gint width;
+    gint height;
+} GMSFRectangle;
+
+typedef enum {
+    GMSF_THEME_IMAGE_TYPE_BORDER_FILL,
+    GMSF_THEME_IMAGE_TYPE_IMAGE_FILE
+} GMSFThemeImageType;
+
+typedef enum {
+    GMSF_THEME_SIZING_TYPE_TRUE_SIZE,
+    GMSF_THEME_SIZING_TYPE_STRETCH,
+    GMSF_THEME_SIZING_TYPE_TILE
+} GMSFThemeSizingType;
+
+typedef enum {
+    GMSF_THEME_FILL_TYPE_SOLID,
+    GMSF_THEME_FILL_TYPE_HORIZONTAL_GRADIENT,
+    GMSF_THEME_FILL_TYPE_VERTICAL_GRADIENT
+} GMSFThemeFillType;
+
+typedef struct _GMSFThemePartInfo {
+    GMSFThemeImageType  bgtype;
+    GMSFThemeSizingType sizing_type;
+    gboolean            has_glyph;
+
+    // Metrics
+    GMSFSize      min_size;
+    GMSFSize      normal_size;
+    gint          border_size;
+    GMSFRectangle sizing_margins;
+    GMSFRectangle content_margins;
+
+    // Color/Fill
+    GMSFThemeFillType fill_type;
+    GMSFColor         fill_color;
+    GMSFColor         border_color;
+} GMSFThemePartInfo;
+
 typedef struct _GMSFStyles GMSFStyles;
 typedef struct _GMSFStylesClass GMSFStylesClass;
 typedef struct _GMSFStylesPrivate GMSFStylesPrivate;
