@@ -13,13 +13,19 @@ struct _GMSFStylesPrivate {
 	gchar **size_schemes;
 	gchar *filemap;
     GKeyFile *themesini;
+    
+	const gchar *selected_color;
+    const gchar *selected_size;
+    GKeyFile *selectedini;
 };
 
 enum {
 	PROP_FILENAME = 1,
 	PROP_VERSION,
 	PROP_COLOR_SCHEMES,
-	PROP_SIZE_SCHEMES
+	PROP_SIZE_SCHEMES,
+	PROP_SELECTED_COLOR_SCHEME,
+	PROP_SELECTED_SIZE_SCHEME
 };
 
 G_DEFINE_TYPE(GMSFStyles, gmsf_styles, G_TYPE_OBJECT)
@@ -44,6 +50,57 @@ static gchar *clean_ini_comments(const gchar *text) {
     return g_string_free(out, FALSE);
 }
 
+static void select_scheme_ini(GMSFStyles *styles) {
+	gpointer extracted;
+	gchar **test;
+	gchar *cur, *str;
+	gsize sz;
+	gint color_i, size_i, file_i, size_sz, i;
+	gboolean free;
+
+	size_sz = color_i = size_i = file_i = 0;
+	
+	for (i = 0; styles->priv->color_schemes[i]; i++) {
+		if (!strcmp(styles->priv->color_schemes[i], styles->priv->selected_color)) {
+			color_i = i;
+		}
+	}
+
+	for (i = 0; styles->priv->size_schemes[i]; i++) {
+		if (!strcmp(styles->priv->size_schemes[i], styles->priv->selected_size)) {
+			size_i = i;
+		}
+		size_sz++;
+	}
+	
+	cur = styles->priv->filemap;
+    file_i = (size_sz * color_i) + size_i;
+    for (i = 0; i < file_i; i++) {
+        cur += strlen(cur) + 1;
+    }
+
+	if (styles->priv->selectedini) {
+		g_key_file_free(styles->priv->selectedini);	
+	}
+	
+	extracted = _pe_extract_resource(&styles->priv->ctx, styles->priv->res, "TEXTFILE", cur, &sz, &free);
+	str = g_convert(extracted, (gssize)sz, "UTF-8", "UTF-16LE", NULL, NULL, NULL);
+	cur = clean_ini_comments(str);
+	styles->priv->selectedini = g_key_file_new();
+    g_key_file_load_from_data(styles->priv->selectedini, cur, -1, G_KEY_FILE_NONE, NULL);
+	g_free(cur);
+	g_free(str);
+	if (free) {
+		g_free(extracted);
+	}
+
+	test = g_key_file_get_groups(styles->priv->selectedini, NULL);
+	for (i = 0; test[i]; i++) {
+		puts(test[i]);
+	}
+	g_strfreev(test);
+}
+
 static void _finalize(GObject *object) {
 	GMSFStyles *styles;
 
@@ -53,6 +110,8 @@ static void _finalize(GObject *object) {
 	g_free(styles->priv->filemap);
 	g_strfreev(styles->priv->size_schemes);
 	g_strfreev(styles->priv->color_schemes);
+	g_key_file_free(styles->priv->themesini);	
+	g_key_file_free(styles->priv->selectedini);	
 	pe_unload(&styles->priv->ctx);
 
     G_OBJECT_CLASS(gmsf_styles_parent_class)->finalize(object);
@@ -137,7 +196,6 @@ static void _constructed(GObject *object) {
 	extracted = _pe_extract_resource(&styles->priv->ctx, styles->priv->res, "TEXTFILE", "THEMES_INI", &sz, &free);
 	str = g_convert(extracted, (gssize)sz, "UTF-8", "UTF-16LE", NULL, NULL, NULL);
 	cur = clean_ini_comments(str);
-	puts(cur);
     styles->priv->themesini = g_key_file_new();
     g_key_file_load_from_data(styles->priv->themesini, cur, -1, G_KEY_FILE_NONE, NULL);
 	g_free(cur);
@@ -152,6 +210,14 @@ static void _set_property(GObject *object, guint prop_id, const GValue *value, G
 	
 	styles = GMSF_STYLES(object);
 	switch (prop_id) {
+		case PROP_SELECTED_COLOR_SCHEME:
+			styles->priv->selected_color = g_value_get_string(value);	
+			select_scheme_ini(styles);
+			break;
+		case PROP_SELECTED_SIZE_SCHEME:
+			styles->priv->selected_size	= g_value_get_string(value);	
+			select_scheme_ini(styles);
+			break;
 		case PROP_FILENAME:
 			styles->priv->filename = g_value_dup_string(value);
 			break;
@@ -189,6 +255,12 @@ static void _get_property(GObject *object, guint prop_id, GValue *value, GParamS
 		case PROP_SIZE_SCHEMES:
 			g_value_set_boxed(value, styles->priv->size_schemes);
 			break;
+		case PROP_SELECTED_COLOR_SCHEME:
+			g_value_set_string(value, styles->priv->selected_color);
+			break;
+		case PROP_SELECTED_SIZE_SCHEME:
+			g_value_set_string(value, styles->priv->selected_size);
+			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -209,28 +281,37 @@ static void gmsf_styles_class_init(GMSFStylesClass *klass) {
     g_object_class_install_property(g_class, PROP_VERSION, g_param_spec_uint("version", "nick", "blurb", 0, 200, 0, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
     g_object_class_install_property(g_class, PROP_COLOR_SCHEMES, g_param_spec_boxed("color-schemes", "nick", "blurb", G_TYPE_STRV, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
     g_object_class_install_property(g_class, PROP_SIZE_SCHEMES, g_param_spec_boxed("size-schemes", "nick", "blurb", G_TYPE_STRV, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+    g_object_class_install_property(g_class, PROP_SELECTED_COLOR_SCHEME, g_param_spec_string("selected-color-scheme", "nick", "blurb", NULL, G_PARAM_READWRITE));
+    g_object_class_install_property(g_class, PROP_SELECTED_SIZE_SCHEME, g_param_spec_string("selected-size-scheme", "nick", "blurb", NULL, G_PARAM_READWRITE));
 
 	g_type_class_add_private(klass, sizeof(GMSFStylesPrivate));
 }	
 
 static void gmsf_styles_init(GMSFStyles *styles) {
 	styles->priv = G_TYPE_INSTANCE_GET_PRIVATE(styles, GMSF_TYPE_STYLES, GMSFStylesPrivate);
+	styles->priv->selectedini = NULL;
 }
 
 GMSFStyles *gmsf_styles_new_from_file(const gchar *filename) {
 	return g_object_new(GMSF_TYPE_STYLES, "filename", filename, NULL);	
 }
 
-#if 0
-void msstyles_select_scheme(msstyles_t *mss, size_t color_index, size_t size_index) {
-	char *cur;
-	int ri, i;
-	
-	cur = mss->filemap;
-    ri = (mss->size_schemes_sz * color_index) + size_index;
-    for (i = 0; i < ri; i++) {
-        cur += strlen(cur) + 1;
-    }
-    mss->current_ini = cur;
+guint gmsf_styles_get_version(GMSFStyles *styles) {
+	return styles->priv->version;
 }
-#endif
+
+const gchar **gmsf_styles_get_color_schemes(GMSFStyles *styles) {
+	return (const gchar **)styles->priv->color_schemes;
+}
+
+const gchar **gmsf_styles_get_size_schemes(GMSFStyles *styles) {
+	return (const gchar **)styles->priv->size_schemes;
+}
+
+void gmsf_styles_select_scheme(GMSFStyles *styles, const gchar *color, const gchar *size) {
+	styles->priv->selected_color = color;
+	styles->priv->selected_size = size;
+	g_object_notify(G_OBJECT(styles), "selected-color-scheme");
+	g_object_notify(G_OBJECT(styles), "selected-size-scheme");
+	select_scheme_ini(styles);
+}
