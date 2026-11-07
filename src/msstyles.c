@@ -20,6 +20,8 @@ struct _GMSFStylesPrivate {
 	const gchar *selected_color;
     const gchar *selected_size;
     GKeyFile *selectedini;
+    
+    GHashTable *image_cache;
 };
 
 enum {
@@ -176,6 +178,45 @@ static GdkPixbuf *load_bitmap(gpointer data, gsize sz) {
 	return pixbuf;
 }
 
+GdkPixbuf *load_bitmap_cached(GMSFStyles *styles, const gchar *name) {
+	GdkPixbuf *pixbuf;
+	gchar *nname;
+	gchar *tmp;
+	
+	tmp = nname = g_ascii_strup(name, -1);
+    do {
+        if (*tmp == '\\') {
+			*tmp = '_';
+		}
+		
+        if (*tmp == '/') {
+			*tmp = '_';
+		}
+		
+        if (*tmp == '.') {
+			*tmp = '_';
+		}
+    } while (*tmp++);
+
+	pixbuf = g_hash_table_lookup(styles->priv->image_cache, nname);
+	if (pixbuf) {
+		g_free(nname);
+	} else {
+		gpointer extracted;
+		gsize sz;
+		gboolean free;
+		
+		extracted = _pe_extract_resource(&styles->priv->ctx, styles->priv->res, nname, NULL, &sz, &free);
+		pixbuf = load_bitmap(extracted, sz);
+		g_hash_table_insert(styles->priv->image_cache, nname, pixbuf);
+		if (free) {
+			g_free(extracted);
+		}
+	}
+	
+	return pixbuf;
+}
+
 static gchar *clean_ini_comments(const gchar *text) {
     GString *out;
     const gchar *p;
@@ -240,22 +281,6 @@ static void select_scheme_ini(GMSFStyles *styles) {
 	if (free) {
 		g_free(extracted);
 	}
-
-#if 0
-	test = g_key_file_get_groups(styles->priv->selectedini, NULL);
-	for (i = 0; test[i]; i++) {
-		puts(test[i]);
-	}
-	g_strfreev(test);
-	
-	extracted = _pe_extract_resource(&styles->priv->ctx, styles->priv->res, "BLUE_RADIOBUTTON25_BMP", NULL, &sz, &free);
-	pixbuf = load_bitmap(extracted, sz);
-	gdk_pixbuf_save(pixbuf, "test.png", "png", NULL, NULL);
-	gdk_pixbuf_unref(pixbuf);
-	if (free) {
-		g_free(extracted);
-	}
-#endif
 }
 
 static void _finalize(GObject *object) {
@@ -263,6 +288,7 @@ static void _finalize(GObject *object) {
 
 	styles = GMSF_STYLES(object);
 
+	g_hash_table_destroy(styles->priv->image_cache);
 	g_free(styles->priv->filename);
 	g_free(styles->priv->filemap);
 	g_strfreev(styles->priv->size_schemes);
@@ -455,6 +481,7 @@ static void gmsf_styles_init(GMSFStyles *styles) {
 	styles->priv = G_TYPE_INSTANCE_GET_PRIVATE(styles, GMSF_TYPE_STYLES, GMSFStylesPrivate);
 	styles->priv->target_dpi = 96;
 	styles->priv->selectedini = NULL;
+	styles->priv->image_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)gdk_pixbuf_unref);
 }
 
 GMSFStyles *gmsf_styles_new_from_file(const gchar *filename) {

@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
 	GMSF_COLOR_FILL_GDK_RGBA(fake, color);
 	printf("Color Test: %f %f %f %f\n", fake.red, fake.green, fake.blue, fake.alpha);
 		
-	styles = gmsf_styles_new_from_file(argv[1]);
+	styles = gmsf_styles_new_from_file("luna.msstyles");
 	
 	printf("Version: %d\n", gmsf_styles_get_version(styles));
 	gmsf_styles_get_documentation(styles, &doc);
