@@ -15,7 +15,7 @@ option(BUILD_SHARED_LIBS "Build as a shared library" TRUE)
 option(BUILD_EXAMPLES "Build examples" TRUE)
 
 find_package(PkgConfig REQUIRED)
-set(PC_DEPS_LIST glib-2.0 gobject-2.0 gio-2.0 gdk-pixbuf-2.0)
+set(PC_DEPS_LIST glib-2.0 gobject-2.0 gdk-pixbuf-2.0)
 pkg_check_modules(PC_DEPS REQUIRED IMPORTED_TARGET ${PC_DEPS_LIST})
 find_path(LIBPE_INCLUDE_DIR NAMES libpe/pe.h)
 find_library(LIBPE_LIBRARY NAMES pe libpe)

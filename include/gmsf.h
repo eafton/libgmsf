@@ -1,6 +1,5 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib-object.h>
-#include <gio/gio.h>
 #include <gmsf-export.h>
 
 #ifndef GMSF_H
@@ -163,7 +162,7 @@ struct _GMSFRichTextClass {
 };
 
 GMSF_EXPORT GType gmsf_rich_text_get_type(void) G_GNUC_CONST;
-GMSF_EXPORT GMSFRichText *gmsf_rich_text_new_from_stream(GInputStream *stream);
+GMSF_EXPORT GMSFRichText *gmsf_rich_text_new_from_fd(gint fd);
 GMSF_EXPORT GMSFRichText *gmsf_rich_text_new_from_file(const gchar *file);
 GMSF_EXPORT GMSFRichText *gmsf_rich_text_new_from_data(gpointer data, gsize sz);
 
