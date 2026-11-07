@@ -22,6 +22,50 @@ struct _GMSFStylesPrivate {
     GKeyFile *selectedini;
     
     GHashTable *image_cache;
+    
+    struct {
+		gboolean flat_menus;
+		gchar *css;
+		gchar *xml;
+		gint captionbarheight;
+		gint min_depth;
+		GMSFSize smcaptionbar_size;
+		GMSFSize scrollbar_size;
+		GMSFColor window;
+		GMSFColor menubar;
+		GMSFColor menu;
+		GMSFColor background;
+		GMSFColor btnface;
+		GMSFColor highlight;
+		GMSFColor activecaption;
+		GMSFColor captiontext;
+		GMSFColor inactivecaption;
+		GMSFColor inactivecaptiontext;
+		GMSFColor gradientactivecaption;
+		GMSFColor gradientinactivecaption;
+		GMSFColor highlighttext;
+		GMSFColor menuhilight;
+		GMSFColor hottracking;
+		GMSFColor btnshadow;
+		GMSFColor graytext;
+		GMSFColor btnhighlight;
+		GMSFColor dkshadow3d;
+		GMSFColor light3d;
+		gchar *captionfont;
+		gchar *smallcaptionfont;
+		gchar *menufont;
+		gchar *statusfont;
+		gchar *msgboxfont;
+		gchar *icontitlefont;
+	} sysmetrics;
+	
+    struct {
+		GMSFColor edge_light_color;
+		GMSFColor edge_high_light_color;
+		GMSFColor edge_shadow_color;
+		GMSFColor edge_dk_shadow_color;
+		GMSFColor edge_fill_color;
+	} globals;
 };
 
 enum {
@@ -35,6 +79,108 @@ enum {
 };
 
 G_DEFINE_TYPE(GMSFStyles, gmsf_styles, G_TYPE_OBJECT)
+
+static gint count_digits(gchar *str) {
+	gchar *tmp;
+	gint ret;
+	
+	ret = 0;
+	tmp = str;
+    do {
+		ret += g_ascii_isdigit(*tmp);
+    } while (*tmp++);
+    
+    return ret;
+}
+
+static gboolean is_all_digits(gchar *str) {
+	gchar *tmp;
+	gboolean ret;
+	
+	ret = TRUE;
+	tmp = str;
+    do {
+		if (!g_ascii_isdigit(*tmp) && (*tmp != '\0')) {
+			ret = FALSE;
+		}
+    } while (*tmp++);
+
+    return ret;
+}
+
+static GMSFColor parse_color(gchar *str) {
+	guint8 r, g, b;
+	gchar *d;
+	char *k;
+	gint i;
+	
+	i = 0;
+	r = g = b = 0;
+	d = g_strdup(str);
+	k = strtok(d, " ");	
+	while (k) {
+		if (k) {
+			if (count_digits(k) <= 3) {
+				if (!i) {
+					r = atoi(k);
+				} else if (i == 1) {
+					g = atoi(k);
+				} else {
+					b = atoi(k);
+				}
+			}
+		}
+		
+		k = strtok(NULL, " ");
+		i++;
+	}
+	g_free(d);
+	
+	return GMSF_COLOR_PACK(r, g, b, 255);
+}
+
+static gchar *font_to_pango(gchar *str) {
+	gchar *d, *family, *size, *style, *pango;
+	char *k;
+	gint i;
+	
+	i = 0;
+	family = size = style = NULL;
+	d = g_strdup(str);
+	k = strtok(d, ",");	
+	while (k) {
+		if (k) {
+			if (!i) {
+				family = g_strdup(k);
+			} else {
+				gchar *t;
+				
+				t = g_strstrip(g_strdup(k));
+				if (is_all_digits(t)) {
+					size = g_strdup(t);
+				} else {
+					style = g_strdup(t);
+					style[0] = g_ascii_toupper(style[0]);
+				}
+				g_free(t);
+			}
+		}
+		
+		k = strtok(NULL, ",");
+		i++;
+	}
+	
+	if (!style) {
+		pango = g_strconcat(family, " ", size, NULL);
+	} else {
+		pango = g_strconcat(family, " ", style, " ", size, NULL);
+		g_free(style);
+	}
+	g_free(d);
+	g_free(size);
+	g_free(family);
+	return pango;
+}
 
 static guint32 read_le32(const guint8 *p) {
     return (guint32)p[0] | ((guint32)p[1] << 8) | ((guint32)p[2] << 16) | ((guint32)p[3] << 24);
@@ -291,12 +437,155 @@ static void select_scheme_ini(GMSFStyles *styles) {
 	if (free) {
 		g_free(extracted);
 	}
+	
+	/* globals table */
+	str = g_key_file_get_string(styles->priv->selectedini, "globals", "EdgeLightColor", NULL);
+	styles->priv->globals.edge_light_color = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "globals", "EdgeHighLightColor", NULL);
+	styles->priv->globals.edge_high_light_color = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "globals", "EdgeShadowColor", NULL);
+	styles->priv->globals.edge_shadow_color = parse_color(str);
+	g_free(str);
+	
+	str = g_key_file_get_string(styles->priv->selectedini, "globals", "EdgeDkShadowColor", NULL);
+	styles->priv->globals.edge_dk_shadow_color = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "globals", "EdgeFillColor", NULL);
+	styles->priv->globals.edge_fill_color = parse_color(str);
+	g_free(str);
+	
+	/* sys metrics table */
+	styles->priv->sysmetrics.scrollbar_size.width = g_key_file_get_integer(styles->priv->selectedini, "SysMetrics", "ScrollbarWidth", NULL);
+	styles->priv->sysmetrics.scrollbar_size.height = g_key_file_get_integer(styles->priv->selectedini, "SysMetrics", "ScrollbarHeight", NULL);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "Window", NULL);
+	styles->priv->sysmetrics.window = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "MenuBar", NULL);
+	styles->priv->sysmetrics.menubar = parse_color(str);
+	g_free(str);
+	
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "Menu", NULL);
+	styles->priv->sysmetrics.menu = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "Background", NULL);
+	styles->priv->sysmetrics.background = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "Btnface", NULL);
+	styles->priv->sysmetrics.btnface = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "Highlight", NULL);
+	styles->priv->sysmetrics.highlight = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "ActiveCaption", NULL);
+	styles->priv->sysmetrics.activecaption = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "CaptionText", NULL);
+	styles->priv->sysmetrics.captiontext = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "InactiveCaption", NULL);
+	styles->priv->sysmetrics.inactivecaption = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "InactiveCaptionText", NULL);
+	styles->priv->sysmetrics.inactivecaptiontext = parse_color(str);
+	g_free(str);
+	
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "GradientActiveCaption", NULL);
+	styles->priv->sysmetrics.gradientactivecaption = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "GradientInactiveCaption", NULL);
+	styles->priv->sysmetrics.gradientinactivecaption = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "HighlightText", NULL);
+	styles->priv->sysmetrics.highlighttext = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "MenuHilight", NULL);
+	styles->priv->sysmetrics.menuhilight = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "Hottracking", NULL);
+	styles->priv->sysmetrics.hottracking = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "BtnShadow", NULL);
+	styles->priv->sysmetrics.btnshadow = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "GrayText", NULL);
+	styles->priv->sysmetrics.graytext = parse_color(str);
+	g_free(str);
+	
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "BtnHighlight", NULL);
+	styles->priv->sysmetrics.btnhighlight = parse_color(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "DkShadow3d", NULL);
+	styles->priv->sysmetrics.dkshadow3d = parse_color(str);
+	g_free(str);
+	
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "Light3d", NULL);
+	styles->priv->sysmetrics.light3d = parse_color(str);
+	g_free(str);
+	
+	styles->priv->sysmetrics.css = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "CssName", NULL);
+	styles->priv->sysmetrics.xml = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "XmlName", NULL);
+	styles->priv->sysmetrics.min_depth = g_key_file_get_integer(styles->priv->selectedini, "SysMetrics", "MinColorDepth", NULL);
+	styles->priv->sysmetrics.flat_menus = g_key_file_get_boolean(styles->priv->selectedini, "SysMetrics", "FlatMenus", NULL);
+
+	styles->priv->sysmetrics.captionbarheight = g_key_file_get_integer(styles->priv->selectedini, "SysMetrics", "CaptionBarHeight", NULL);
+	styles->priv->sysmetrics.smcaptionbar_size.width = g_key_file_get_integer(styles->priv->selectedini, "SysMetrics", "SMCaptionBarWidth", NULL);
+	styles->priv->sysmetrics.smcaptionbar_size.height = g_key_file_get_integer(styles->priv->selectedini, "SysMetrics", "SMCaptionBarHeight", NULL);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "CaptionFont", NULL);
+	styles->priv->sysmetrics.captionfont = font_to_pango(str);
+	g_free(str);
+	
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "SmallCaptionFont", NULL);
+	styles->priv->sysmetrics.smallcaptionfont = font_to_pango(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "MenuFont", NULL);
+	styles->priv->sysmetrics.menufont = font_to_pango(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "MsgBoxFont", NULL);
+	styles->priv->sysmetrics.msgboxfont = font_to_pango(str);
+	g_free(str);
+
+	str = g_key_file_get_string(styles->priv->selectedini, "SysMetrics", "IconTitleFont", NULL);
+	styles->priv->sysmetrics.icontitlefont = font_to_pango(str);
+	g_free(str);
+
 }
 
 static void _finalize(GObject *object) {
 	GMSFStyles *styles;
 
 	styles = GMSF_STYLES(object);
+
+	g_free(styles->priv->sysmetrics.css);
+	g_free(styles->priv->sysmetrics.xml);
+	g_free(styles->priv->sysmetrics.captionfont);
+	g_free(styles->priv->sysmetrics.smallcaptionfont);
+	g_free(styles->priv->sysmetrics.menufont);
+	g_free(styles->priv->sysmetrics.msgboxfont);
+	g_free(styles->priv->sysmetrics.icontitlefont);
 
 	g_hash_table_destroy(styles->priv->image_cache);
 	g_free(styles->priv->filename);

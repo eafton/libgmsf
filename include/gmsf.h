@@ -47,15 +47,14 @@ typedef enum {
 } GMSFThemePartImage;
 
 typedef enum {
-    GMSF_THEME_PART_STATE_NONE     = 0x0,
-    GMSF_THEME_PART_STATE_HILITE   = 0x1,
-    GMSF_THEME_PART_STATE_ACTIVE   = 0x2,
-    GMSF_THEME_PART_STATE_DEFAULT  = 0x4,
+    GMSF_THEME_PART_STATE_NONE = 0x0,
+    GMSF_THEME_PART_STATE_HILITE = 0x1,
+    GMSF_THEME_PART_STATE_ACTIVE = 0x2,
+    GMSF_THEME_PART_STATE_DEFAULT = 0x4,
     GMSF_THEME_PART_STATE_DISABLED = 0x8,
-
     GMSF_THEME_PART_STATE_UNCHECKED = 0x10,
-    GMSF_THEME_PART_STATE_CHECKED   = 0x20,
-    GMSF_THEME_PART_STATE_MIXED     = 0x40
+    GMSF_THEME_PART_STATE_CHECKED = 0x20,
+    GMSF_THEME_PART_STATE_MIXED = 0x40
 } GMSFThemePartState;
 
 typedef enum {
@@ -76,27 +75,27 @@ typedef enum {
 } GMSFThemeFillType;
 
 typedef struct _GMSFThemePartInfo {
-    GMSFThemeImageType  bg_type;
+    GMSFThemeImageType bg_type;
     GMSFThemeSizingType sizing_type;
 
     /* Metrics */
-    GMSFSize      min_size;
-    GMSFSize      normal_size;
-    gint          border_size;
+    GMSFSize min_size;
+    GMSFSize normal_size;
+    gint border_size;
     GMSFRectangle sizing_margins;
     GMSFRectangle content_margins;
 
     /* Color/Fill */
     GMSFThemeFillType fill_type;
-    GMSFColor         fill_color;
-    GMSFColor         border_color;
-    GMSFColor         text_color;
-    gint              gradient_n_stops;
-    GMSFColor*        gradient_stops;
+    GMSFColor fill_color;
+    GMSFColor border_color;
+    GMSFColor text_color;
+    gint gradient_n_stops;
+    GMSFColor *gradient_stops;
 
     /* Images */
-    GdkPixbuf* bg_image;
-    GdkPixbuf* glyph_image;
+    GdkPixbuf *bg_image;
+    GdkPixbuf *glyph_image;
 } GMSFThemePartInfo;
 
 typedef struct {
