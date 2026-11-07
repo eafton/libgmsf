@@ -178,7 +178,8 @@ static GdkPixbuf *load_bitmap(gpointer data, gsize sz) {
 	return pixbuf;
 }
 
-GdkPixbuf *load_bitmap_cached(GMSFStyles *styles, const gchar *name) {
+/* If the alpha component of 'key'is not 0, colorkey is applied using gdk_pixbuf_add_alpha. If it is 0, no colorkey is applied */
+GdkPixbuf *load_bitmap_cached(GMSFStyles *styles, const gchar *name, GMSFColor key) {
 	GdkPixbuf *pixbuf;
 	gchar *nname;
 	gchar *tmp;
@@ -208,6 +209,15 @@ GdkPixbuf *load_bitmap_cached(GMSFStyles *styles, const gchar *name) {
 		
 		extracted = _pe_extract_resource(&styles->priv->ctx, styles->priv->res, nname, NULL, &sz, &free);
 		pixbuf = load_bitmap(extracted, sz);
+		
+		if (GMSF_COLOR_ALPHA(key)) {
+			GdkPixbuf *old;
+	
+			old = pixbuf;
+			pixbuf = gdk_pixbuf_add_alpha(old, TRUE, GMSF_COLOR_RED(key), GMSF_COLOR_GREEN(key), GMSF_COLOR_BLUE(key));
+			gdk_pixbuf_unref(old);
+		}
+		
 		g_hash_table_insert(styles->priv->image_cache, nname, pixbuf);
 		if (free) {
 			g_free(extracted);
