@@ -1,5 +1,6 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib-object.h>
+#include <gio/gio.h>
 #include <gmsf-export.h>
 
 #ifndef GMSF_H
@@ -7,9 +8,11 @@
 
 G_BEGIN_DECLS
 
+/* Version */
 #define GMSF_VERSION_MAJOR 0
 #define GMSF_VERSION_MINOR 0
 
+/* Basic Types */
 typedef guint32 GMSFColor;
 #define GMSF_COLOR_PACK(r, g, b, a) ((r << 24) | (g << 16) | (b << 8) | (a))
 #define GMSF_COLOR_RED(c) ((c >> 24) & 0xff)
@@ -18,13 +21,6 @@ typedef guint32 GMSFColor;
 #define GMSF_COLOR_ALPHA(c) (c & 0xff)
 #define GMSF_COLOR_FILL_GDK_RGBA_POINTER(g, c) (g)->red = ((gdouble)GMSF_COLOR_RED(c) / 255.0f); (g)->green = ((gdouble)GMSF_COLOR_GREEN(c) / 255.0f); (g)->blue = ((gdouble)GMSF_COLOR_BLUE(c) / 255.0f); (g)->alpha = ((gdouble)GMSF_COLOR_ALPHA(c) / 255.0f);
 #define GMSF_COLOR_FILL_GDK_RGBA(g, c) GMSF_COLOR_FILL_GDK_RGBA_POINTER(&g, c);
-
-#define GMSF_TYPE_STYLES (gmsf_styles_get_type())
-#define GMSF_STYLES(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), GMSF_TYPE_STYLES, GMSFStyles))
-#define GMSF_STYLES_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass), GMSF_TYPE_STYLES, GMSFStylesClass))
-#define GMSF_IS_STYLES(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), GMSF_TYPE_STYLES))
-#define GMSF_IS_STYLES_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), GMSF_TYPE_STYLES))
-#define GMSF_STYLES_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj), GMSF_TYPE_STYLES, GMSFStylesClass))
 
 typedef struct _GMSFSize {
     gint width;
@@ -37,6 +33,14 @@ typedef struct _GMSFRectangle {
     gint width;
     gint height;
 } GMSFRectangle;
+
+/* Styles */
+#define GMSF_TYPE_STYLES (gmsf_styles_get_type())
+#define GMSF_STYLES(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), GMSF_TYPE_STYLES, GMSFStyles))
+#define GMSF_STYLES_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass), GMSF_TYPE_STYLES, GMSFStylesClass))
+#define GMSF_IS_STYLES(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), GMSF_TYPE_STYLES))
+#define GMSF_IS_STYLES_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), GMSF_TYPE_STYLES))
+#define GMSF_STYLES_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj), GMSF_TYPE_STYLES, GMSFStylesClass))
 
 typedef enum {
     GMSF_THEME_PART_IMAGE_BACKGROUND,
@@ -96,10 +100,6 @@ typedef struct _GMSFThemePartInfo {
     GdkPixbuf* glyph_image;
 } GMSFThemePartInfo;
 
-typedef struct _GMSFStyles GMSFStyles;
-typedef struct _GMSFStylesClass GMSFStylesClass;
-typedef struct _GMSFStylesPrivate GMSFStylesPrivate;
-
 typedef struct {
 	gchar *display_name;
 	gchar *last_updated;
@@ -113,6 +113,10 @@ typedef struct {
 	gchar *theme_name;
 	gchar *wmp_skin;	
 } GMSFStylesDocumentation;
+
+typedef struct _GMSFStyles GMSFStyles;
+typedef struct _GMSFStylesClass GMSFStylesClass;
+typedef struct _GMSFStylesPrivate GMSFStylesPrivate;
 
 struct _GMSFStyles {
 	GObject parent_instance;
@@ -136,6 +140,32 @@ GMSF_EXPORT void gmsf_styles_get_size_scheme_info(GMSFStyles *styles, const gcha
 GMSF_EXPORT void gmsf_styles_select_scheme(GMSFStyles *styles, const gchar *color, const gchar *size);
 GMSF_EXPORT void gmsf_styles_get_documentation(GMSFStyles *styles, GMSFStylesDocumentation *to_fill);
 GMSF_EXPORT void gmsf_styles_documentation_free_fields(GMSFStylesDocumentation *doc);
+
+/* RTF */
+#define GMSF_TYPE_RICH_TEXT (gmsf_rich_text_get_type())
+#define GMSF_RICH_TEXT(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), GMSF_TYPE_RICH_TEXT, GMSFRichText))
+#define GMSF_RICH_TEXT_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass), GMSF_TYPE_RICH_TEXT, GMSFRichTextClass))
+#define GMSF_IS_RICH_TEXT(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), GMSF_TYPE_RICH_TEXT))
+#define GMSF_IS_RICH_TEXT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), GMSF_TYPE_RICH_TEXT))
+#define GMSF_RICH_TEXT_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj), GMSF_TYPE_RICH_TEXT, GMSFRichTextClass))
+
+typedef struct _GMSFRichText GMSFRichText;
+typedef struct _GMSFRichTextClass GMSFRichTextClass;
+typedef struct _GMSFRichTextPrivate GMSFRichTextPrivate;
+
+struct _GMSFRichText{
+	GObject parent_instance;
+	GMSFRichTextPrivate *priv;
+};
+
+struct _GMSFRichTextClass {
+	GObjectClass parent_class;
+};
+
+GMSF_EXPORT GType gmsf_rich_text_get_type(void) G_GNUC_CONST;
+GMSF_EXPORT GMSFRichText *gmsf_rich_text_new_from_stream(GInputStream *stream);
+GMSF_EXPORT GMSFRichText *gmsf_rich_text_new_from_file(const gchar *file);
+GMSF_EXPORT GMSFRichText *gmsf_rich_text_new_from_data(gpointer data, gsize sz);
 
 G_END_DECLS
 
