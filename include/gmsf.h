@@ -165,6 +165,41 @@ GMSF_EXPORT GMSFRichText *gmsf_rich_text_new_from_fd(gint fd);
 GMSF_EXPORT GMSFRichText *gmsf_rich_text_new_from_file(const gchar *file);
 GMSF_EXPORT GMSFRichText *gmsf_rich_text_new_from_data(gpointer data, gsize sz);
 
+
+/* MSAgent 2.0 */
+#define GMSF_TYPE_AGENT (gmsf_agent_get_type())
+#define GMSF_AGENT(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), GMSF_TYPE_AGENT, GMSFAgent))
+#define GMSF_AGENT_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass), GMSF_TYPE_AGENT, GMSFAgentClass))
+#define GMSF_IS_AGENT(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), GMSF_TYPE_AGENT))
+#define GMSF_IS_AGENT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), GMSF_TYPE_AGENT))
+#define GMSF_AGENT_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj), GMSF_TYPE_AGENT, GMSFAgentClass))
+
+typedef struct _GMSFAgent GMSFAgent;
+typedef struct _GMSFAgentClass GMSFAgentClass;
+typedef struct _GMSFAgentPrivate GMSFAgentPrivate;
+
+typedef enum {
+    GMSF_AGENT_FLAGS_NONE = 0,
+    GMSF_AGENT_FLAG_VOICE_OUTPUT = 1,
+    GMSF_AGENT_FLAG_WORD_BALLOON = 2,
+    GMSF_AGENT_FLAG_WORD_BALLOON_SIZE_TO_TEXT = 4,
+    GMSF_AGENT_FLAG_WORD_BALLOON_NO_AUTO_HIDE = 8,
+    GMSF_AGENT_FLAG_WORD_BALLOON_NO_AUTO_PACE = 16,
+    GMSF_AGENT_FLAG_STANDARD_ANIMATION_SET = 32
+} GMSFAgentFlags;
+ 
+struct _GMSFAgent {
+	GObject parent_instance;
+	GMSFAgentPrivate *priv;
+};
+
+struct _GMSFAgentClass {
+	GObjectClass parent_class;
+};
+
+GMSF_EXPORT GType gmsf_agent_get_type(void) G_GNUC_CONST;
+GMSF_EXPORT GMSFAgent *gmsf_agent_new_from_file(const gchar *file);
+
 G_END_DECLS
 
 #endif
