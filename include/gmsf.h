@@ -253,6 +253,8 @@ GMSF_EXPORT GMSFAgentAnimationState *gmsf_agent_get_animation_states(GMSFAgent *
 GMSF_EXPORT GdkPixbuf *gmsf_agent_get_tray_icon(GMSFAgent *agent);
 GMSF_EXPORT gulong gmsf_agent_get_audio_count(GMSFAgent *agent);
 GMSF_EXPORT SNDFILE *gmsf_agent_open_audio(GMSFAgent *agent, guint index, SF_INFO *sfinfo);
+GMSF_EXPORT GdkPixbuf *gmsf_agent_get_image(GMSFAgent *agent, guint index);
+GMSF_EXPORT gulong gmsf_agent_get_image_count(GMSFAgent *agent);
 
 /* misc stuff tbd */
 typedef enum {

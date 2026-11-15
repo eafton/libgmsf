@@ -11,6 +11,12 @@ typedef struct {
 	gsize sz, offset;
 } GMSFAgentAudio;
 
+typedef struct {
+    const guint8 *data;
+    gsize byte_pos;
+    guint8 bit_pos; 
+} GMSFDecompressorState;
+
 struct _GMSFAgentPrivate {
 	FILE *f;
 	gchar *filename;
@@ -36,7 +42,9 @@ struct _GMSFAgentPrivate {
 	
 	gulong anim_info_locator[2];
 	gulong img_info_locator[2];
-	
+	GHashTable *img_locators;
+	GHashTable *img_cache;
+
 	gulong aud_info_locator[2];
 	gulong audios_sz;
 	GMSFAgentAudio *audios;
@@ -51,6 +59,125 @@ enum {
 };
 
 G_DEFINE_TYPE(GMSFAgent, gmsf_agent, G_TYPE_OBJECT)
+
+static guint32 decompressor_read_bits(GMSFDecompressorState *reader, guint count) {
+    guint32 value;
+    guint i;
+    
+    value = 0;
+    for (i = 0; i < count; i++) {
+        guint8 bit;
+        
+        bit = (reader->data[reader->byte_pos] >> reader->bit_pos) & 1;
+        value |= ((guint32)bit << i);
+
+        reader->bit_pos++;
+        if (reader->bit_pos == 8) {
+            reader->bit_pos = 0;
+            reader->byte_pos++;
+        }
+    }
+    return value;
+}
+
+
+static void decompressor(gpointer in, gpointer out) {
+    GMSFDecompressorState reader;
+    const guint8 *src;
+    guint8 *dst;
+    gsize out_pos;
+
+    g_return_if_fail(in != NULL);
+    g_return_if_fail(out != NULL);
+
+    src = (const guint8 *)in;
+    dst = (guint8 *)out;
+    g_return_if_fail(src[0] == 0x00);
+
+    reader.data = src;
+    reader.byte_pos = 1;
+    reader.bit_pos = 0;
+    out_pos = 0;
+
+    while (TRUE) {
+        guint32 type_bit;
+
+        type_bit = decompressor_read_bits(&reader, 1);
+        if (!type_bit) {
+            dst[out_pos++] = (guint8)decompressor_read_bits(&reader, 8);
+        } else {
+            guint32 count, offset_add, raw_offset, offset, i;
+            guint len_ones, offset_bits, seq_ones;
+            gsize copy_src;
+
+            count = 2;
+            seq_ones = 0;
+            while (seq_ones < 3) {
+                if (decompressor_read_bits(&reader, 1) == 1) {
+                    seq_ones++;
+                } else {
+                    break;
+                }
+            }
+
+            offset_bits = 0;
+            offset_add = 0;
+            switch (seq_ones) {
+                case 0:
+                    offset_bits = 6;
+                    offset_add = 0x0001;
+                    break;
+                case 1:
+                    offset_bits = 9;
+                    offset_add = 0x0041;
+                    break;
+                case 2:
+                    offset_bits = 12;
+                    offset_add = 0x0241;
+                    break;
+                case 3:
+                    offset_bits = 20;
+                    offset_add = 0x1241;
+                    break;
+            }
+
+            raw_offset = decompressor_read_bits(&reader, offset_bits);
+            if (offset_bits == 20) {
+                if (raw_offset == 0x000FFFFF) {
+                    break;
+                }
+                count += 1;
+            }
+
+            offset = raw_offset + offset_add;
+            len_ones = 0;
+            while (len_ones < 11) {
+                if (decompressor_read_bits(&reader, 1) == 1) {
+                    len_ones++;
+                } else {
+                    break;
+                }
+            }
+
+            if (len_ones == 11) {
+                if (decompressor_read_bits(&reader, 1) == 1) {
+                    return;
+                }
+            }
+
+            if (len_ones > 0) {
+                count += (1U << len_ones) - 1;
+                count += decompressor_read_bits(&reader, len_ones);
+            }
+
+            g_return_if_fail(offset <= out_pos);
+            copy_src = out_pos - offset;
+            for (i = 0; i < count; i++) {
+                dst[out_pos++] = dst[copy_src++];
+            }
+        }
+    }
+}
 
 static sf_count_t vio_get_len(void *udata) {
 	GMSFAgentAudio *audio;
@@ -457,6 +584,20 @@ static void _constructed(GObject *object) {
 		agent->priv->audios[i].sz = GUINT32_FROM_LE(locator[1]);
 	}
 	
+	fseek(agent->priv->f, agent->priv->img_info_locator[0], SEEK_SET);
+	fread(&ul, sizeof(guint32), 1, agent->priv->f);
+	ul = GUINT32_FROM_LE(ul);
+	for (i = 0; i < ul; i++) {
+		guint32 *lctr;
+		
+		lctr = g_new(guint32, 2);
+		fread(lctr, sizeof(guint32), 2, agent->priv->f);
+		fread(&ul2, sizeof(guint32), 1, agent->priv->f);
+		lctr[0] = GUINT32_FROM_LE(lctr[0]);
+		lctr[1] = GUINT32_FROM_LE(lctr[1]);
+
+		g_hash_table_insert(agent->priv->img_locators, GUINT_TO_POINTER(i), lctr);
+	}
 }
 
 static void gmsf_agent_class_init(GMSFAgentClass *klass) {
@@ -479,6 +620,9 @@ static void gmsf_agent_init(GMSFAgent *agent) {
 	
 	agent->priv->localized_info = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, free_localized_info);
 	agent->priv->tray_icon = NULL;
+	
+	agent->priv->img_locators = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
+	agent->priv->img_cache = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)gdk_pixbuf_unref);
 	
 	agent->priv->audio_io.get_filelen = vio_get_len;
 	agent->priv->audio_io.seek = vio_seek;
@@ -575,4 +719,155 @@ gulong gmsf_agent_get_audio_count(GMSFAgent *agent) {
 SNDFILE *gmsf_agent_open_audio(GMSFAgent *agent, guint index, SF_INFO *sfinfo) {
 	fseek(agent->priv->f, agent->priv->audios[index].offset, SEEK_SET);
 	return sf_open_virtual(&agent->priv->audio_io, SFM_READ, sfinfo, &agent->priv->audios[index]);
+}
+
+guint8 *_raw8_to_bmp(const guint8 *data, guint16 width, guint16 height, const GMSFColor *palette, gulong palette_sz, gsize *out_size) {
+    guint32 stride;
+    guint32 pixel_bytes;
+    guint32 palette_bytes;
+    guint32 pixel_offset;
+    guint32 file_size;
+    guint8 *result;
+    guint8 file_header[14];
+    guint8 info_header[40];
+    gulong i;
+
+    if (out_size) {
+        *out_size = 0;
+    }
+
+    if (!data || !palette || palette_sz == 0 || width == 0 || height == 0) {
+        return NULL;
+    }
+
+    stride = ((guint32)width + 3) & 0xFC;
+    pixel_bytes = stride * (guint32)height;
+    palette_bytes = (guint32)palette_sz * 4;
+    pixel_offset = 14 + 40 + palette_bytes;
+    file_size = pixel_offset + pixel_bytes;
+
+    file_header[0] = 'B';
+    file_header[1] = 'M';
+    file_header[2] = (guint8)(file_size & 0xff);
+    file_header[3] = (guint8)((file_size >> 8) & 0xff);
+    file_header[4] = (guint8)((file_size >> 16) & 0xff);
+    file_header[5] = (guint8)((file_size >> 24) & 0xff);
+    file_header[6] = 0;
+    file_header[7] = 0;
+    file_header[8] = 0;
+    file_header[9] = 0;
+    file_header[10] = (guint8)(pixel_offset & 0xff);
+    file_header[11] = (guint8)((pixel_offset >> 8) & 0xff);
+    file_header[12] = (guint8)((pixel_offset >> 16) & 0xff);
+    file_header[13] = (guint8)((pixel_offset >> 24) & 0xff);
+
+    memset(info_header, 0, sizeof(info_header));
+    info_header[0] = 40;
+    info_header[4] = (guint8)(width & 0xff);
+    info_header[5] = (guint8)((width >> 8) & 0xff);
+    info_header[8] = (guint8)(height & 0xff);
+    info_header[9] = (guint8)((height >> 8) & 0xff);
+    info_header[12] = 1;
+    info_header[14] = 8;
+    info_header[20] = (guint8)(pixel_bytes & 0xff);
+    info_header[21] = (guint8)((pixel_bytes >> 8) & 0xff);
+    info_header[22] = (guint8)((pixel_bytes >> 16) & 0xff);
+    info_header[23] = (guint8)((pixel_bytes >> 24) & 0xff);
+    info_header[32] = (guint8)(palette_sz & 0xff);
+    info_header[33] = (guint8)((palette_sz >> 8) & 0xff);
+    info_header[34] = (guint8)((palette_sz >> 16) & 0xff);
+    info_header[35] = (guint8)((palette_sz >> 24) & 0xff);
+
+    result = g_malloc(file_size);
+    memcpy(result, file_header, 14);
+    memcpy(result + 14, info_header, 40);
+
+    for (i = 0; i < palette_sz; i++) {
+		guint8 *entry;
+        GMSFColor c;
+        
+        c = palette[i];
+		entry = result + 54 + (i * 4);
+        entry[0] = (guint8)GMSF_COLOR_RED(c);
+        entry[1] = (guint8)GMSF_COLOR_GREEN(c);
+        entry[2] = (guint8)GMSF_COLOR_BLUE(c);
+        entry[3] = 0;
+    }
+
+    memcpy(result + pixel_offset, data, pixel_bytes);
+
+    if (out_size) {
+        *out_size = file_size;
+    }
+
+    return result;
+}
+
+GdkPixbuf *gmsf_agent_get_image(GMSFAgent *agent, guint index) {
+	GdkPixbuf *ret;
+	
+	ret = g_hash_table_lookup(agent->priv->img_cache, GUINT_TO_POINTER(index));
+	if (!ret) {
+		GdkPixbuf *old;
+		gpointer buf;
+		guint32 *locator;
+		guint32 ul;
+		guint16 w, h;
+		guint8 uc;
+		
+		locator = g_hash_table_lookup(agent->priv->img_locators, GUINT_TO_POINTER(index));
+		if (!locator) {
+			return NULL;
+		}
+
+		fseek(agent->priv->f, locator[0], SEEK_SET);
+		fread(&uc, sizeof(guint8), 1, agent->priv->f);
+		fread(&w, sizeof(guint16), 1, agent->priv->f);
+		fread(&h, sizeof(guint16), 1, agent->priv->f);
+		fread(&uc, sizeof(guint8), 1, agent->priv->f);
+		fread(&ul, sizeof(guint32), 1, agent->priv->f);
+		w = GUINT16_FROM_LE(w);
+		h = GUINT16_FROM_LE(h);
+		ul = GUINT32_FROM_LE(ul);
+
+		buf = g_malloc(ul);
+		fread(buf, 1, ul, agent->priv->f);
+		
+		if (uc) {
+			GdkPixbufLoader *loader;
+			GdkPixbuf *pixbuf;
+			guint8 *bytes;
+			gpointer dcbuf;
+			gsize dcsz;
+			gsize bmp_sz;
+				
+			dcsz = ((w + 3) & 0xFC) * h;
+			dcbuf = g_malloc(dcsz);
+			decompressor(buf, dcbuf);
+			loader = gdk_pixbuf_loader_new();
+			bytes = _raw8_to_bmp((const guint8 *)dcbuf, w, h, agent->priv->palette, agent->priv->palette_sz, &bmp_sz);
+			gdk_pixbuf_loader_write(loader, (const guchar *)bytes, bmp_sz, NULL);
+			gdk_pixbuf_loader_close(loader, NULL);
+			ret = gdk_pixbuf_loader_get_pixbuf(loader);
+			g_free(bytes);
+			g_free(dcbuf);
+			gdk_pixbuf_ref(ret);
+			g_object_unref(loader);
+		} else {
+			ret = _load_bitmap(buf, ul);
+		}
+
+		old = ret;
+		ret = gdk_pixbuf_add_alpha(old, TRUE, GMSF_COLOR_RED(agent->priv->palette[agent->priv->transparent_color_index]), GMSF_COLOR_GREEN(agent->priv->palette[agent->priv->transparent_color_index]), GMSF_COLOR_BLUE(agent->priv->palette[agent->priv->transparent_color_index]));
+		gdk_pixbuf_unref(old);
+		g_hash_table_insert(agent->priv->img_cache, GUINT_TO_POINTER(index), ret);
+		g_free(buf);
+	}
+	
+	
+	return ret;
+}
+
+gulong gmsf_agent_get_image_count(GMSFAgent *agent) {
+	return g_hash_table_size(agent->priv->img_locators);
 }

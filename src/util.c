@@ -4,6 +4,7 @@
 #include <libpe/pe.h>
 #include "util.h"
 
+
 GdkPixbuf *_load_bitmap(gpointer data, gsize sz) {
 	GdkPixbufLoader *loader;
     GdkPixbuf *pixbuf;
@@ -253,3 +254,4 @@ gpointer _pe_extract_resource(pe_ctx_t *ctx, pe_resources_t *res, const gchar *n
 
     return content;
 }
+
