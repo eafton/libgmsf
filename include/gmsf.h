@@ -242,7 +242,7 @@ GMSF_EXPORT GMSFAgent *gmsf_agent_new_from_file(const gchar *file);
 GMSF_EXPORT GMSFAgentFlags gmsf_agent_get_flags(GMSFAgent *agent);
 GMSF_EXPORT void gmsf_agent_get_animation_set_version(GMSFAgent *agent, gushort *maj, gushort *min);
 GMSF_EXPORT void gmsf_agent_get_version(GMSFAgent *agent, gushort *maj, gushort *min);
-GMSF_EXPORT void gmsf_agent_get_size(GMSFAgent *agent, gushort *width, gushort *height);
+GMSF_EXPORT void gmsf_agent_get_size(GMSFAgent *agent, gushort *width, gushort *height); /* use GMSFSize here? */
 GMSF_EXPORT const gchar *gmsf_agent_get_guid(GMSFAgent *agent);
 GMSF_EXPORT GMSFAgentLocalizedInfo *gmsf_agent_get_localized_info(GMSFAgent *agent, gushort langid);
 GMSF_EXPORT gushort *gmsf_agent_get_localized_info_languages(GMSFAgent *agent, gsize *sz);
