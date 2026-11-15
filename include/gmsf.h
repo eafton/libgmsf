@@ -178,6 +178,42 @@ typedef struct _GMSFAgent GMSFAgent;
 typedef struct _GMSFAgentClass GMSFAgentClass;
 typedef struct _GMSFAgentPrivate GMSFAgentPrivate;
 
+typedef struct {
+	gchar *name;
+	gchar *desc;
+	gchar *extra;
+} GMSFAgentLocalizedInfo;
+
+typedef struct {
+	gchar *name;
+	gchar **anims; /* NULL terminated */
+} GMSFAgentAnimationState;
+
+typedef struct {
+	gchar *engine_guid;
+	gchar *mode_guid;
+	gulong speed;
+	gushort pitch;
+
+	/* only valid if GMSF_AGENT_FLAG_EXTRA_SPEECH_DATA */
+	gushort lang;
+	gchar *lang_dialect;
+	gushort gender;
+	gushort age;
+	gchar *style;
+} GMSFAgentVoiceInfo;
+
+typedef struct {
+	guchar text_lines;
+	guchar chars_per_line;
+	GMSFColor fg;
+	GMSFColor bg;
+	GMSFColor border;
+	gchar *font;
+	glong font_height;
+	glong weight;
+} GMSFAgentBalloonInfo;
+
 typedef enum {
     GMSF_AGENT_FLAGS_NONE = 0,
     GMSF_AGENT_FLAG_VOICE_OUTPUT = 1,
@@ -202,6 +238,42 @@ struct _GMSFAgentClass {
 
 GMSF_EXPORT GType gmsf_agent_get_type(void) G_GNUC_CONST;
 GMSF_EXPORT GMSFAgent *gmsf_agent_new_from_file(const gchar *file);
+
+GMSF_EXPORT GMSFAgentFlags gmsf_agent_get_flags(GMSFAgent *agent);
+GMSF_EXPORT void gmsf_agent_get_animation_set_version(GMSFAgent *agent, gushort *maj, gushort *min);
+GMSF_EXPORT void gmsf_agent_get_version(GMSFAgent *agent, gushort *maj, gushort *min);
+GMSF_EXPORT void gmsf_agent_get_size(GMSFAgent *agent, gushort *width, gushort *height);
+GMSF_EXPORT const gchar *gmsf_agent_get_guid(GMSFAgent *agent);
+GMSF_EXPORT GMSFAgentLocalizedInfo *gmsf_agent_get_localized_info(GMSFAgent *agent, gushort langid);
+GMSF_EXPORT gushort *gmsf_agent_get_localized_info_languages(GMSFAgent *agent, gsize *sz);
+GMSF_EXPORT GMSFAgentVoiceInfo *gmsf_agent_get_voice_info(GMSFAgent *agent);
+GMSF_EXPORT GMSFAgentBalloonInfo *gmsf_agent_get_balloon_info(GMSFAgent *agent);
+GMSF_EXPORT GMSFAgentAnimationState *gmsf_agent_get_animation_states(GMSFAgent *agent, gsize *sz);
+GMSF_EXPORT GdkPixbuf *gmsf_agent_get_tray_icon(GMSFAgent *agent);
+
+/* misc stuff tbd */
+typedef enum {
+    GMSF_SAPI_INFO_FLAGS_NONE = 0,
+    GMSF_SAPI_INFO_FLAG_ENGINE = 1,
+    GMSF_SAPI_INFO_FLAG_MODE = 2
+} GMSFSAPIInfoFlags;
+ 
+typedef struct {
+	GMSFSAPIInfoFlags flags;
+	union _GMSFSAPIInfo {
+		struct _GMSFSAPIInfoEngine {
+			int bla;
+		} engine;
+		struct _GMSFSAPIInfoMode {
+			int bkge;
+		} mode;
+	} u;
+} GMSFSAPIInfo;
+
+GMSF_EXPORT void gmsf_query_sapi_information_from_guid(GMSFSAPIInfo *info, const gchar *guid);
+GMSF_EXPORT void gmsf_map_sapi_information_to_speechd_voice(GMSFSAPIInfo *info);
+GMSF_EXPORT const gchar *gmsf_langid_to_locale(gushort langid);
+GMSF_EXPORT gushort gmsf_locale_to_langid(const gchar *locale);
 
 G_END_DECLS
 

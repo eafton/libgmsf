@@ -1,18 +1,9 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <glib-object.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gmsf.h>
-
-typedef struct {
-	gchar *name;
-	gchar *desc;
-	gchar *extra;
-} GMSFAgentLocalizedInfo;
-
-typedef struct {
-	gchar *name;
-	gchar **anims;
-} GMSFAgentAnimationState;
+#include "util.h"
 
 struct _GMSFAgentPrivate {
 	FILE *f;
@@ -27,30 +18,16 @@ struct _GMSFAgentPrivate {
 	GHashTable *localized_info;
 	
 	/* VOICEINFO */
-	gchar *engine_guid;
-	gchar *mode_guid;
-	gulong speed;
-	gushort pitch;
-	gushort lang;
-	gchar *lang_dialect;
-	gushort gender;
-	gushort age;
-	gchar *style;
+	GMSFAgentVoiceInfo vi;
 	
 	/* BALLOONINFO */
-	guchar text_lines;
-	guchar chars_per_line;
-	GMSFColor fg;
-	GMSFColor bg;
-	GMSFColor border;
-	gchar *font;
-	glong font_height;
-	glong weight;
+	GMSFAgentBalloonInfo bi;
 	
 	GMSFColor *palette;
 	gulong palette_sz;
 	
-	gulong tray_icon_offset;
+	GdkPixbuf *tray_icon;
+	
 	gulong anim_info_locator[2];
 	gulong img_info_locator[2];
 	gulong aud_info_locator[2];
@@ -65,6 +42,50 @@ enum {
 
 G_DEFINE_TYPE(GMSFAgent, gmsf_agent, G_TYPE_OBJECT)
 
+GdkPixbuf *apply_alpha_mask(GdkPixbuf *src, GdkPixbuf *mask) {
+	GdkPixbuf *ret;
+	guchar *pixels, *mask_pixels;
+	int width, height, rowstride, n_channels, mask_rowstride, mask_n_channels, y ,x;
+
+	ret = gdk_pixbuf_add_alpha(src, FALSE, 0, 0, 0);
+	width = gdk_pixbuf_get_width(ret);
+	height = gdk_pixbuf_get_height(ret);
+	rowstride = gdk_pixbuf_get_rowstride(ret);
+	n_channels = gdk_pixbuf_get_n_channels(ret);
+    pixels = gdk_pixbuf_get_pixels(ret);
+
+    mask_rowstride = gdk_pixbuf_get_rowstride(mask);
+    mask_n_channels = gdk_pixbuf_get_n_channels(mask);
+    mask_pixels = gdk_pixbuf_get_pixels(mask);
+
+    for (y = 0; y < height; y++) {
+        guchar *dest_line, *mask_line;
+      
+        dest_line = pixels + y * rowstride;
+        mask_line = mask_pixels + y * mask_rowstride;
+        for (x = 0; x < width; x++) {
+            guchar *dest_p, *mask_p;
+            guint alpha_val;
+            
+			dest_p = dest_line + x * n_channels;
+			mask_p = mask_line + x * mask_n_channels;
+
+            if (mask_n_channels >= 4) {
+                alpha_val = mask_p[3]; 
+            } else if (mask_n_channels == 1) {
+				alpha_val = *mask_p;
+			} else {
+                alpha_val = (mask_p[0] + mask_p[1] + mask_p[2]) / 3;
+            }
+			
+            dest_p[3] = 255 - alpha_val;
+        }
+    }
+
+	return ret;
+}
+
+
 static void free_localized_info(gpointer data) {
 	GMSFAgentLocalizedInfo *info;
 	
@@ -74,7 +95,6 @@ static void free_localized_info(gpointer data) {
 	g_free(info->extra);
 	g_free(info);
 }
-
 
 static gchar *read_string(FILE *handle) {
 	gchar *ret;
@@ -111,18 +131,14 @@ static gchar *read_guid(FILE *handle) {
 	return g_strdup_printf("{%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}", guid_data1, guid_data23[0], guid_data23[1], guid_data4[0], guid_data4[1], guid_data4[2], guid_data4[3], guid_data4[4], guid_data4[5], guid_data4[6], guid_data4[7]);
 }
 
-static gchar *langid_to_locale(guint16 langid) {
-	/* TODO */
-	return g_strdup_printf("%u", langid);
-}
-
 static void _finalize(GObject *object) {
 	GMSFAgent *agent;
 	
 	agent = GMSF_AGENT(object);
 
 	g_free(agent->priv->filename);
-	
+	gdk_pixbuf_unref(agent->priv->tray_icon);
+
     G_OBJECT_CLASS(gmsf_agent_parent_class)->finalize(object);
 }
 
@@ -242,46 +258,46 @@ static void _constructed(GObject *object) {
 	agent->priv->animset_version_minor = GUINT16_FROM_LE(uspair[1]);
 
 	if (agent->priv->flags & GMSF_AGENT_FLAG_VOICE_OUTPUT) {
-		agent->priv->engine_guid = read_guid(agent->priv->f);
-		agent->priv->mode_guid = read_guid(agent->priv->f);
+		agent->priv->vi.engine_guid = read_guid(agent->priv->f);
+		agent->priv->vi.mode_guid = read_guid(agent->priv->f);
 		fread(&ul, sizeof(guint32), 1, agent->priv->f);
-		agent->priv->speed = GUINT32_FROM_LE(ul);
+		agent->priv->vi.speed = GUINT32_FROM_LE(ul);
 		fread(&us, sizeof(guint16), 1, agent->priv->f);
-		agent->priv->pitch = GUINT16_FROM_LE(us);
+		agent->priv->vi.pitch = GUINT16_FROM_LE(us);
 		fread(&uc, sizeof(guint8), 1, agent->priv->f);
 
 		if (uc) {
 			fread(&us, sizeof(guint16), 1, agent->priv->f);
-			agent->priv->lang = GUINT16_FROM_LE(us);
+			agent->priv->vi.lang = GUINT16_FROM_LE(us);
 			
-			agent->priv->lang_dialect = read_string(agent->priv->f);
+			agent->priv->vi.lang_dialect = read_string(agent->priv->f);
 
 			fread(&us, sizeof(guint16), 1, agent->priv->f);
-			agent->priv->gender = GUINT16_FROM_LE(us);
+			agent->priv->vi.gender = GUINT16_FROM_LE(us);
 
 			fread(&us, sizeof(guint16), 1, agent->priv->f);
-			agent->priv->age = GUINT16_FROM_LE(us);
+			agent->priv->vi.age = GUINT16_FROM_LE(us);
 
-			agent->priv->style = read_string(agent->priv->f);
+			agent->priv->vi.style = read_string(agent->priv->f);
 		}
 	}
 	
 	if (agent->priv->flags & GMSF_AGENT_FLAG_WORD_BALLOON) {
-		fread(&agent->priv->text_lines, sizeof(guint8), 1, agent->priv->f);
-		fread(&agent->priv->chars_per_line, sizeof(guint8), 1, agent->priv->f);
+		fread(&agent->priv->bi.text_lines, sizeof(guint8), 1, agent->priv->f);
+		fread(&agent->priv->bi.chars_per_line, sizeof(guint8), 1, agent->priv->f);
 		
 		fread(ucquad, sizeof(guint8), 4, agent->priv->f);
-		agent->priv->fg = GMSF_COLOR_PACK(ucquad[0], ucquad[1], ucquad[2], 255);
+		agent->priv->bi.fg = GMSF_COLOR_PACK(ucquad[0], ucquad[1], ucquad[2], 255);
 		fread(ucquad, sizeof(guint8), 4, agent->priv->f);
-		agent->priv->bg = GMSF_COLOR_PACK(ucquad[0], ucquad[1], ucquad[2], 255);
+		agent->priv->bi.bg = GMSF_COLOR_PACK(ucquad[0], ucquad[1], ucquad[2], 255);
 		fread(ucquad, sizeof(guint8), 4, agent->priv->f);
-		agent->priv->border = GMSF_COLOR_PACK(ucquad[0], ucquad[1], ucquad[2], 255);
+		agent->priv->bi.border = GMSF_COLOR_PACK(ucquad[0], ucquad[1], ucquad[2], 255);
 				
-		agent->priv->font = read_string(agent->priv->f);
+		agent->priv->bi.font = read_string(agent->priv->f);
 		fread(&l, sizeof(gint32), 1, agent->priv->f);
-		agent->priv->font_height = GINT32_FROM_LE(l);
+		agent->priv->bi.font_height = GINT32_FROM_LE(l);
 		fread(&l, sizeof(gint32), 1, agent->priv->f);
-		agent->priv->weight = GINT32_FROM_LE(l);
+		agent->priv->bi.weight = GINT32_FROM_LE(l);
 		fread(&uc, sizeof(guint8), 1, agent->priv->f);
 		if (uc) {
 			agent->priv->flags |= GMSF_AGENT_FLAG_WORD_BALLOON_ITALICIZE;
@@ -299,12 +315,30 @@ static void _constructed(GObject *object) {
 	
 	fread(&uc, sizeof(guint8), 1, agent->priv->f);
 	if (uc) {
+		GdkPixbuf *mono, *color;
+		gpointer dib;
+		gsize sz;
+		
 		agent->priv->flags |= GMSF_AGENT_FLAG_TRAY_ICON;
-		agent->priv->tray_icon_offset = ftell(agent->priv->f);
+		
 		fread(&ul, sizeof(guint32), 1, agent->priv->f);
-		fseek(agent->priv->f, GUINT32_FROM_LE(ul), SEEK_CUR);
+		sz = GUINT32_FROM_LE(ul);
+		dib = g_malloc(sz);
+		fread(dib, 1, sz, agent->priv->f);
+		mono = _load_bitmap(dib, sz);
+		g_free(dib);
+		
 		fread(&ul, sizeof(guint32), 1, agent->priv->f);
-		fseek(agent->priv->f, GUINT32_FROM_LE(ul), SEEK_CUR);
+		sz = GUINT32_FROM_LE(ul);
+		dib = g_malloc(sz);
+		fread(dib, 1, sz, agent->priv->f);
+		color = _load_bitmap(dib, sz);
+		g_free(dib);
+		
+		agent->priv->tray_icon = apply_alpha_mask(color, mono);
+	
+		gdk_pixbuf_unref(color);
+		gdk_pixbuf_unref(mono);
 	}
 
 	fread(&us, sizeof(guint16), 1, agent->priv->f);
@@ -337,7 +371,7 @@ static void _constructed(GObject *object) {
 		info->name = read_string(agent->priv->f);
 		info->desc = read_string(agent->priv->f);
 		info->extra = read_string(agent->priv->f);
-		g_hash_table_insert(agent->priv->localized_info, langid_to_locale(us2), info);
+		g_hash_table_insert(agent->priv->localized_info, GUINT_TO_POINTER(us2), info);
 	}
 }
 
@@ -359,10 +393,87 @@ static void gmsf_agent_class_init(GMSFAgentClass *klass) {
 static void gmsf_agent_init(GMSFAgent *agent) {
 	agent->priv = G_TYPE_INSTANCE_GET_PRIVATE(agent, GMSF_TYPE_AGENT, GMSFAgentPrivate);
 	
-	agent->priv->localized_info = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, free_localized_info);
+	agent->priv->localized_info = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, free_localized_info);
+	agent->priv->tray_icon = NULL;
 }
 
 GMSFAgent *gmsf_agent_new_from_file(const gchar *file) {
 	return g_object_new(GMSF_TYPE_AGENT, "filename", file, NULL);	
 }
+
+
+GMSFAgentFlags gmsf_agent_get_flags(GMSFAgent *agent) {
+	return agent->priv->flags;
+}
+
+void gmsf_agent_get_animation_set_version(GMSFAgent *agent, gushort *maj, gushort *min) {
+	if (maj) *maj = agent->priv->animset_version_major;
+	if (min) *min = agent->priv->animset_version_minor;
+}
+
+void gmsf_agent_get_version(GMSFAgent *agent, gushort *maj, gushort *min) {
+	if (maj) *maj = agent->priv->version_major;
+	if (min) *min = agent->priv->version_minor;
+}
+
+void gmsf_agent_get_size(GMSFAgent *agent, gushort *width, gushort *height) {
+	if (width) *width = agent->priv->width;
+	if (height) *height = agent->priv->height;
+}
+
+const gchar *gmsf_agent_get_guid(GMSFAgent *agent) {
+	return agent->priv->guid;
+}
+
+GMSFAgentLocalizedInfo *gmsf_agent_get_localized_info(GMSFAgent *agent, gushort langid) {
+	return (GMSFAgentLocalizedInfo *)g_hash_table_lookup(agent->priv->localized_info, GUINT_TO_POINTER(langid));
+}
+
+gushort *gmsf_agent_get_localized_info_languages(GMSFAgent *agent, gsize *sz) {
+	gushort *ret;
+	gpointer *data;
+	guint csz, i;
+	
+	data = g_hash_table_get_keys_as_array(agent->priv->localized_info, &csz);
+	if (sz) {
+		*sz = csz;
+	}
+	
+	ret = g_new(gushort, csz);
+	for (i = 0; i < csz; i++) {
+		ret[i] = GPOINTER_TO_UINT(data[i]);
+	}
+	g_free(data);
+	
+	return ret;
+}
+
+GMSFAgentVoiceInfo *gmsf_agent_get_voice_info(GMSFAgent *agent) {
+	if (agent->priv->flags & GMSF_AGENT_FLAG_VOICE_OUTPUT) {
+		return &agent->priv->vi;
+	}
+
+	return NULL;
+}
+
+GMSFAgentBalloonInfo *gmsf_agent_get_balloon_info(GMSFAgent *agent) {
+	if (agent->priv->flags & GMSF_AGENT_FLAG_VOICE_OUTPUT) {
+		return &agent->priv->bi;
+	}
+	
+	return NULL;
+}
+
+GMSFAgentAnimationState *gmsf_agent_get_animation_states(GMSFAgent *agent, gsize *sz) {
+	if (sz) {
+		*sz = agent->priv->states_sz;
+	}
+	
+	return agent->priv->states;
+}
+
+GdkPixbuf *gmsf_agent_get_tray_icon(GMSFAgent *agent) {
+	return agent->priv->tray_icon;
+}
+
 
