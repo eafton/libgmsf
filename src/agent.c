@@ -9,6 +9,11 @@ typedef struct {
 	gchar *extra;
 } GMSFAgentLocalizedInfo;
 
+typedef struct {
+	gchar *name;
+	gchar **anims;
+} GMSFAgentAnimationState;
+
 struct _GMSFAgentPrivate {
 	FILE *f;
 	gchar *filename;
@@ -20,6 +25,38 @@ struct _GMSFAgentPrivate {
 	guchar transparent_color_index;
 	gchar *guid;
 	GHashTable *localized_info;
+	
+	/* VOICEINFO */
+	gchar *engine_guid;
+	gchar *mode_guid;
+	gulong speed;
+	gushort pitch;
+	gushort lang;
+	gchar *lang_dialect;
+	gushort gender;
+	gushort age;
+	gchar *style;
+	
+	/* BALLOONINFO */
+	guchar text_lines;
+	guchar chars_per_line;
+	GMSFColor fg;
+	GMSFColor bg;
+	GMSFColor border;
+	gchar *font;
+	glong font_height;
+	glong weight;
+	
+	GMSFColor *palette;
+	gulong palette_sz;
+	
+	gulong tray_icon_offset;
+	gulong anim_info_locator[2];
+	gulong img_info_locator[2];
+	gulong aud_info_locator[2];
+	
+	GMSFAgentAnimationState *states;
+	gushort states_sz;
 };
 
 enum {
@@ -36,6 +73,28 @@ static void free_localized_info(gpointer data) {
 	g_free(info->desc);
 	g_free(info->extra);
 	g_free(info);
+}
+
+
+static gchar *read_string(FILE *handle) {
+	gchar *ret;
+	guint16 *str;
+	guint32 sz, i;
+
+	fread(&sz, sizeof(guint32), 1, handle);
+	sz = GUINT32_FROM_LE(sz);
+	if (!sz) {
+		return NULL;
+	}
+	
+	str = g_new(guint16, sz + 1);
+	fread(str, sizeof(guint16), sz + 1, handle); 
+	for (i = 0; i < sz; i++) {
+		str[i] = GUINT16_FROM_LE(str[i]);
+	}
+	ret = g_utf16_to_utf8(str, sz, NULL, NULL, NULL);
+	g_free(str);
+	return ret;
 }
 
 static gchar *read_guid(FILE *handle) {
@@ -95,25 +154,6 @@ static void _get_property(GObject *object, guint prop_id, GValue *value, GParamS
 	}
 }
 
-void dump_bits(unsigned val)
-{
-int i;
-  unsigned mask = 1 << (32 - 1);
-  char output;
-
-  for(i = 0; i < 32; i++) {
-    output = (val & mask) ? '1' : '0';
-    printf("%c", output);
-    mask = mask >> 1;
-
-    if ((i + 1) % 8 == 0) {
-      printf(" ");
-    }
-  }
-
-  printf("\n");
-}
-
 static void _constructed(GObject *object) {
 	GMSFAgent *agent;
 	guint16 uspair[2];
@@ -122,7 +162,10 @@ static void _constructed(GObject *object) {
 	guint32 magic;
 	guint32 localized_info_offset;
 	guint32 ul, ul2;
+	gint32 l;
+	guint8 ucquad[4];
 	guint8 uc;
+	gulong i;
 	
 	agent = GMSF_AGENT(object);
     G_OBJECT_CLASS(gmsf_agent_parent_class)->constructed(object);
@@ -140,6 +183,18 @@ static void _constructed(GObject *object) {
 	locator[0] = GUINT32_FROM_LE(locator[0]);
 	locator[1] = GUINT32_FROM_LE(locator[1]);
 	
+	fread(agent->priv->anim_info_locator, sizeof(guint32), 2, agent->priv->f);
+	agent->priv->anim_info_locator[0] = GUINT32_FROM_LE(agent->priv->anim_info_locator[0]);
+	agent->priv->anim_info_locator[1] = GUINT32_FROM_LE(agent->priv->anim_info_locator[1]);
+
+	fread(agent->priv->img_info_locator, sizeof(guint32), 2, agent->priv->f);
+	agent->priv->img_info_locator[0] = GUINT32_FROM_LE(agent->priv->img_info_locator[0]);
+	agent->priv->img_info_locator[1] = GUINT32_FROM_LE(agent->priv->img_info_locator[1]);
+
+	fread(agent->priv->aud_info_locator, sizeof(guint32), 2, agent->priv->f);
+	agent->priv->aud_info_locator[0] = GUINT32_FROM_LE(agent->priv->aud_info_locator[0]);
+	agent->priv->aud_info_locator[1] = GUINT32_FROM_LE(agent->priv->aud_info_locator[1]);
+
 	/* ACSCHARACTERINFO */
 	fseek(agent->priv->f, locator[0], SEEK_SET);
 	fread(uspair, sizeof(guint16), 2, agent->priv->f);
@@ -187,21 +242,103 @@ static void _constructed(GObject *object) {
 	agent->priv->animset_version_minor = GUINT16_FROM_LE(uspair[1]);
 
 	if (agent->priv->flags & GMSF_AGENT_FLAG_VOICE_OUTPUT) {
-		gchar *engine_guid;
-		gchar *mode_guid;
-		
-		engine_guid = read_guid(agent->priv->f);
-		mode_guid = read_guid(agent->priv->f);
+		agent->priv->engine_guid = read_guid(agent->priv->f);
+		agent->priv->mode_guid = read_guid(agent->priv->f);
 		fread(&ul, sizeof(guint32), 1, agent->priv->f);
-		ul = GUINT32_FROM_LE(ul);
+		agent->priv->speed = GUINT32_FROM_LE(ul);
 		fread(&us, sizeof(guint16), 1, agent->priv->f);
-		us = GUINT16_FROM_LE(us);
+		agent->priv->pitch = GUINT16_FROM_LE(us);
 		fread(&uc, sizeof(guint8), 1, agent->priv->f);
 
-		printf("Engine: %s\nMode: %s\nSpeed: %u\nPitch: %u\nExtra: %u\n", engine_guid, mode_guid, ul, us, uc);
+		if (uc) {
+			fread(&us, sizeof(guint16), 1, agent->priv->f);
+			agent->priv->lang = GUINT16_FROM_LE(us);
+			
+			agent->priv->lang_dialect = read_string(agent->priv->f);
+
+			fread(&us, sizeof(guint16), 1, agent->priv->f);
+			agent->priv->gender = GUINT16_FROM_LE(us);
+
+			fread(&us, sizeof(guint16), 1, agent->priv->f);
+			agent->priv->age = GUINT16_FROM_LE(us);
+
+			agent->priv->style = read_string(agent->priv->f);
+		}
 	}
 	
-	/* todo, read from localized_info_offset */
+	if (agent->priv->flags & GMSF_AGENT_FLAG_WORD_BALLOON) {
+		fread(&agent->priv->text_lines, sizeof(guint8), 1, agent->priv->f);
+		fread(&agent->priv->chars_per_line, sizeof(guint8), 1, agent->priv->f);
+		
+		fread(ucquad, sizeof(guint8), 4, agent->priv->f);
+		agent->priv->fg = GMSF_COLOR_PACK(ucquad[0], ucquad[1], ucquad[2], 255);
+		fread(ucquad, sizeof(guint8), 4, agent->priv->f);
+		agent->priv->bg = GMSF_COLOR_PACK(ucquad[0], ucquad[1], ucquad[2], 255);
+		fread(ucquad, sizeof(guint8), 4, agent->priv->f);
+		agent->priv->border = GMSF_COLOR_PACK(ucquad[0], ucquad[1], ucquad[2], 255);
+				
+		agent->priv->font = read_string(agent->priv->f);
+		fread(&l, sizeof(gint32), 1, agent->priv->f);
+		agent->priv->font_height = GINT32_FROM_LE(l);
+		fread(&l, sizeof(gint32), 1, agent->priv->f);
+		agent->priv->weight = GINT32_FROM_LE(l);
+		fread(&uc, sizeof(guint8), 1, agent->priv->f);
+		if (uc) {
+			agent->priv->flags |= GMSF_AGENT_FLAG_WORD_BALLOON_ITALICIZE;
+		}
+		fread(&uc, sizeof(guint8), 1, agent->priv->f);
+	}
+	
+	fread(&ul, sizeof(guint32), 1, agent->priv->f);
+	agent->priv->palette_sz = GUINT32_FROM_LE(ul);
+	agent->priv->palette = g_new(GMSFColor, agent->priv->palette_sz);
+	for (i = 0; i < agent->priv->palette_sz; i++) {
+		fread(ucquad, sizeof(guint8), 4, agent->priv->f);
+		agent->priv->palette[i] = GMSF_COLOR_PACK(ucquad[0], ucquad[1], ucquad[2], 255);
+	}
+	
+	fread(&uc, sizeof(guint8), 1, agent->priv->f);
+	if (uc) {
+		agent->priv->flags |= GMSF_AGENT_FLAG_TRAY_ICON;
+		agent->priv->tray_icon_offset = ftell(agent->priv->f);
+		fread(&ul, sizeof(guint32), 1, agent->priv->f);
+		fseek(agent->priv->f, GUINT32_FROM_LE(ul), SEEK_CUR);
+		fread(&ul, sizeof(guint32), 1, agent->priv->f);
+		fseek(agent->priv->f, GUINT32_FROM_LE(ul), SEEK_CUR);
+	}
+
+	fread(&us, sizeof(guint16), 1, agent->priv->f);
+	agent->priv->states_sz = GUINT16_FROM_LE(us);
+	agent->priv->states = g_new(GMSFAgentAnimationState, agent->priv->states_sz);
+	for (i = 0; i < agent->priv->states_sz; i++) {
+		guint16 j;
+
+		agent->priv->states[i].name = read_string(agent->priv->f);
+		
+		fread(&us, sizeof(guint16), 1, agent->priv->f);
+		us = GUINT16_FROM_LE(us);
+		agent->priv->states[i].anims = g_new(gchar *, us + 1);
+		for (j = 0; j < us; j++) {
+			agent->priv->states[i].anims[j] = read_string(agent->priv->f);
+		}
+		agent->priv->states[i].anims[us] = NULL;
+	}
+
+	fread(&us, sizeof(guint16), 1, agent->priv->f);
+	us = GUINT16_FROM_LE(us);
+	for (i = 0; i < us; i++) {
+		GMSFAgentLocalizedInfo *info;
+		guint16 us2;
+		
+		fread(&us2, sizeof(guint16), 1, agent->priv->f);
+		us2 = GUINT16_FROM_LE(us2);
+		
+		info = g_new(GMSFAgentLocalizedInfo, 1);
+		info->name = read_string(agent->priv->f);
+		info->desc = read_string(agent->priv->f);
+		info->extra = read_string(agent->priv->f);
+		g_hash_table_insert(agent->priv->localized_info, langid_to_locale(us2), info);
+	}
 }
 
 static void gmsf_agent_class_init(GMSFAgentClass *klass) {
@@ -223,7 +360,6 @@ static void gmsf_agent_init(GMSFAgent *agent) {
 	agent->priv = G_TYPE_INSTANCE_GET_PRIVATE(agent, GMSF_TYPE_AGENT, GMSFAgentPrivate);
 	
 	agent->priv->localized_info = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, free_localized_info);
-
 }
 
 GMSFAgent *gmsf_agent_new_from_file(const gchar *file) {
