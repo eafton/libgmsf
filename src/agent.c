@@ -2,8 +2,14 @@
 #include <glib/gstdio.h>
 #include <glib-object.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#include <sndfile.h>
 #include <gmsf.h>
 #include "util.h"
+
+typedef struct {
+	GMSFAgentPrivate *priv;
+	gsize sz, offset;
+} GMSFAgentAudio;
 
 struct _GMSFAgentPrivate {
 	FILE *f;
@@ -30,7 +36,11 @@ struct _GMSFAgentPrivate {
 	
 	gulong anim_info_locator[2];
 	gulong img_info_locator[2];
+	
 	gulong aud_info_locator[2];
+	gulong audios_sz;
+	GMSFAgentAudio *audios;
+	SF_VIRTUAL_IO audio_io;
 	
 	GMSFAgentAnimationState *states;
 	gushort states_sz;
@@ -41,6 +51,66 @@ enum {
 };
 
 G_DEFINE_TYPE(GMSFAgent, gmsf_agent, G_TYPE_OBJECT)
+
+static sf_count_t vio_get_len(void *udata) {
+	GMSFAgentAudio *audio;
+	
+	audio = udata;
+	return (sf_count_t)audio->sz;
+}
+
+static sf_count_t vio_seek(sf_count_t offset, int whence, void *udata) {
+	GMSFAgentAudio *audio;
+	sf_count_t rel_pos;
+
+	audio = udata;
+	switch (whence) {
+		case SEEK_CUR:
+			rel_pos = (ftell(audio->priv->f) - (long)audio->offset) + offset;
+			break;
+		case SEEK_END:
+			rel_pos = (sf_count_t)audio->sz + offset;
+			break;
+		default:
+			rel_pos = offset;
+			break;
+	}
+
+	if (rel_pos < 0) {
+		rel_pos = 0;
+	} else if (rel_pos > (sf_count_t)audio->sz) {
+		rel_pos = (sf_count_t)audio->sz;
+	}
+
+	fseek(audio->priv->f, (long)(audio->offset + rel_pos), SEEK_SET);
+	return rel_pos;
+}
+
+static sf_count_t vio_read(void *ptr, sf_count_t count, void *udata) {
+	GMSFAgentAudio *audio;
+	sf_count_t rel_pos, remaining;
+	
+	audio = udata;
+	rel_pos = ftell(audio->priv->f) - (long)audio->offset;
+	remaining = (sf_count_t)audio->sz - rel_pos;
+
+	if (remaining <= 0) {
+		return 0;
+	}
+	
+	if (count > remaining) {
+		count = remaining;
+	}
+
+	return (sf_count_t)fread(ptr, 1, (size_t)count, audio->priv->f);
+}
+
+static sf_count_t vio_tell(void *udata) {
+	GMSFAgentAudio *audio;
+	
+	audio = udata;
+	return (sf_count_t)(ftell(audio->priv->f) - (long)audio->offset);
+}
 
 GdkPixbuf *apply_alpha_mask(GdkPixbuf *src, GdkPixbuf *mask) {
 	GdkPixbuf *ret;
@@ -84,7 +154,6 @@ GdkPixbuf *apply_alpha_mask(GdkPixbuf *src, GdkPixbuf *mask) {
 
 	return ret;
 }
-
 
 static void free_localized_info(gpointer data) {
 	GMSFAgentLocalizedInfo *info;
@@ -358,6 +427,7 @@ static void _constructed(GObject *object) {
 		agent->priv->states[i].anims[us] = NULL;
 	}
 
+	fseek(agent->priv->f, localized_info_offset, SEEK_SET);
 	fread(&us, sizeof(guint16), 1, agent->priv->f);
 	us = GUINT16_FROM_LE(us);
 	for (i = 0; i < us; i++) {
@@ -373,6 +443,20 @@ static void _constructed(GObject *object) {
 		info->extra = read_string(agent->priv->f);
 		g_hash_table_insert(agent->priv->localized_info, GUINT_TO_POINTER(us2), info);
 	}
+	
+	fseek(agent->priv->f, agent->priv->aud_info_locator[0], SEEK_SET);
+	fread(&ul, sizeof(guint32), 1, agent->priv->f);
+	agent->priv->audios_sz = GUINT32_FROM_LE(ul);
+	agent->priv->audios = g_new(GMSFAgentAudio, agent->priv->audios_sz);
+	for (i = 0; i < agent->priv->audios_sz; i++) {
+		fread(locator, sizeof(guint32), 2, agent->priv->f);
+		fread(&ul, sizeof(guint32), 1, agent->priv->f);
+		
+		agent->priv->audios[i].priv = agent->priv;
+		agent->priv->audios[i].offset = GUINT32_FROM_LE(locator[0]);
+		agent->priv->audios[i].sz = GUINT32_FROM_LE(locator[1]);
+	}
+	
 }
 
 static void gmsf_agent_class_init(GMSFAgentClass *klass) {
@@ -395,6 +479,12 @@ static void gmsf_agent_init(GMSFAgent *agent) {
 	
 	agent->priv->localized_info = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, free_localized_info);
 	agent->priv->tray_icon = NULL;
+	
+	agent->priv->audio_io.get_filelen = vio_get_len;
+	agent->priv->audio_io.seek = vio_seek;
+	agent->priv->audio_io.read = vio_read;
+	agent->priv->audio_io.tell = vio_tell;
+	agent->priv->audio_io.write = NULL;
 }
 
 GMSFAgent *gmsf_agent_new_from_file(const gchar *file) {
@@ -416,9 +506,11 @@ void gmsf_agent_get_version(GMSFAgent *agent, gushort *maj, gushort *min) {
 	if (min) *min = agent->priv->version_minor;
 }
 
-void gmsf_agent_get_size(GMSFAgent *agent, gushort *width, gushort *height) {
-	if (width) *width = agent->priv->width;
-	if (height) *height = agent->priv->height;
+void gmsf_agent_get_size(GMSFAgent *agent, GMSFSize *size) {
+	if (size) {
+		size->width = agent->priv->width;
+		size->height = agent->priv->height;
+	}
 }
 
 const gchar *gmsf_agent_get_guid(GMSFAgent *agent) {
@@ -476,4 +568,11 @@ GdkPixbuf *gmsf_agent_get_tray_icon(GMSFAgent *agent) {
 	return agent->priv->tray_icon;
 }
 
+gulong gmsf_agent_get_audio_count(GMSFAgent *agent) {
+	return agent->priv->audios_sz;
+}
 
+SNDFILE *gmsf_agent_open_audio(GMSFAgent *agent, guint index, SF_INFO *sfinfo) {
+	fseek(agent->priv->f, agent->priv->audios[index].offset, SEEK_SET);
+	return sf_open_virtual(&agent->priv->audio_io, SFM_READ, sfinfo, &agent->priv->audios[index]);
+}
