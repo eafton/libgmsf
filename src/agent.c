@@ -6,6 +6,12 @@
 #include <gmsf.h>
 #include "util.h"
 
+/* TODO: 
+ * -Memory cleaup
+ * -Error checking
+ * -Image regions
+ * -Animations */
+ 
 typedef struct {
 	GMSFAgentPrivate *priv;
 	gsize sz, offset;
@@ -79,7 +85,6 @@ static guint32 decompressor_read_bits(GMSFDecompressorState *reader, guint count
     }
     return value;
 }
-
 
 static void decompressor(gpointer in, gpointer out) {
     GMSFDecompressorState reader;
@@ -863,7 +868,6 @@ GdkPixbuf *gmsf_agent_get_image(GMSFAgent *agent, guint index) {
 		g_hash_table_insert(agent->priv->img_cache, GUINT_TO_POINTER(index), ret);
 		g_free(buf);
 	}
-	
 	
 	return ret;
 }

@@ -256,7 +256,7 @@ GMSF_EXPORT SNDFILE *gmsf_agent_open_audio(GMSFAgent *agent, guint index, SF_INF
 GMSF_EXPORT GdkPixbuf *gmsf_agent_get_image(GMSFAgent *agent, guint index);
 GMSF_EXPORT gulong gmsf_agent_get_image_count(GMSFAgent *agent);
 
-/* misc stuff tbd */
+/* TODO */
 typedef enum {
     GMSF_SAPI_INFO_FLAGS_NONE = 0,
     GMSF_SAPI_INFO_FLAG_ENGINE = 1,
