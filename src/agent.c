@@ -7,6 +7,7 @@
 #include "util.h"
 
 /* TODO: 
+ * -Properites
  * -Image regions
  * -Animations */
  
