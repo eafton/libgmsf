@@ -7,8 +7,6 @@
 #include "util.h"
 
 /* TODO: 
- * -Memory cleaup
- * -Error checking
  * -Image regions
  * -Animations */
  
@@ -337,8 +335,36 @@ static void _finalize(GObject *object) {
 	
 	agent = GMSF_AGENT(object);
 
+	fclose(agent->priv->f);
 	g_free(agent->priv->filename);
-	gdk_pixbuf_unref(agent->priv->tray_icon);
+	g_free(agent->priv->guid);
+	g_hash_table_destroy(agent->priv->localized_info);
+	
+	if (agent->priv->flags & GMSF_AGENT_FLAG_VOICE_OUTPUT) {
+		g_free(agent->priv->vi.engine_guid);
+		g_free(agent->priv->vi.mode_guid);
+		if (agent->priv->flags & GMSF_AGENT_FLAG_EXTRA_SPEECH_DATA) {
+			g_free(agent->priv->vi.lang_dialect);
+			g_free(agent->priv->vi.style);
+		}		
+	}
+	
+	if (agent->priv->flags & GMSF_AGENT_FLAG_WORD_BALLOON) {
+		g_free(agent->priv->bi.font);
+	}
+	
+	g_free(agent->priv->palette);
+		
+	if (agent->priv->tray_icon) {
+		gdk_pixbuf_unref(agent->priv->tray_icon);
+	}
+	
+	g_hash_table_destroy(agent->priv->img_locators);
+	g_hash_table_destroy(agent->priv->img_cache);
+
+	g_free(agent->priv->audios);
+
+	g_free(agent->priv->states);
 
     G_OBJECT_CLASS(gmsf_agent_parent_class)->finalize(object);
 }
@@ -642,20 +668,24 @@ GMSFAgent *gmsf_agent_new_from_file(const gchar *file) {
 
 
 GMSFAgentFlags gmsf_agent_get_flags(GMSFAgent *agent) {
+	g_return_val_if_fail(agent, GMSF_AGENT_FLAGS_NONE);
 	return agent->priv->flags;
 }
 
 void gmsf_agent_get_animation_set_version(GMSFAgent *agent, gushort *maj, gushort *min) {
+	g_return_if_fail(agent);
 	if (maj) *maj = agent->priv->animset_version_major;
 	if (min) *min = agent->priv->animset_version_minor;
 }
 
 void gmsf_agent_get_version(GMSFAgent *agent, gushort *maj, gushort *min) {
+	g_return_if_fail(agent);
 	if (maj) *maj = agent->priv->version_major;
 	if (min) *min = agent->priv->version_minor;
 }
 
 void gmsf_agent_get_size(GMSFAgent *agent, GMSFSize *size) {
+	g_return_if_fail(agent);
 	if (size) {
 		size->width = agent->priv->width;
 		size->height = agent->priv->height;
@@ -663,10 +693,12 @@ void gmsf_agent_get_size(GMSFAgent *agent, GMSFSize *size) {
 }
 
 const gchar *gmsf_agent_get_guid(GMSFAgent *agent) {
+	g_return_val_if_fail(agent, NULL);
 	return agent->priv->guid;
 }
 
 GMSFAgentLocalizedInfo *gmsf_agent_get_localized_info(GMSFAgent *agent, gushort langid) {
+	g_return_val_if_fail(agent, NULL);
 	return (GMSFAgentLocalizedInfo *)g_hash_table_lookup(agent->priv->localized_info, GUINT_TO_POINTER(langid));
 }
 
@@ -675,6 +707,8 @@ gushort *gmsf_agent_get_localized_info_languages(GMSFAgent *agent, gsize *sz) {
 	gpointer *data;
 	guint csz, i;
 	
+	g_return_val_if_fail(agent, NULL);
+
 	data = g_hash_table_get_keys_as_array(agent->priv->localized_info, &csz);
 	if (sz) {
 		*sz = csz;
@@ -690,6 +724,8 @@ gushort *gmsf_agent_get_localized_info_languages(GMSFAgent *agent, gsize *sz) {
 }
 
 GMSFAgentVoiceInfo *gmsf_agent_get_voice_info(GMSFAgent *agent) {
+	g_return_val_if_fail(agent, NULL);
+
 	if (agent->priv->flags & GMSF_AGENT_FLAG_VOICE_OUTPUT) {
 		return &agent->priv->vi;
 	}
@@ -698,6 +734,8 @@ GMSFAgentVoiceInfo *gmsf_agent_get_voice_info(GMSFAgent *agent) {
 }
 
 GMSFAgentBalloonInfo *gmsf_agent_get_balloon_info(GMSFAgent *agent) {
+	g_return_val_if_fail(agent, NULL);
+
 	if (agent->priv->flags & GMSF_AGENT_FLAG_VOICE_OUTPUT) {
 		return &agent->priv->bi;
 	}
@@ -706,6 +744,8 @@ GMSFAgentBalloonInfo *gmsf_agent_get_balloon_info(GMSFAgent *agent) {
 }
 
 GMSFAgentAnimationState *gmsf_agent_get_animation_states(GMSFAgent *agent, gsize *sz) {
+	g_return_val_if_fail(agent, NULL);
+
 	if (sz) {
 		*sz = agent->priv->states_sz;
 	}
@@ -714,14 +754,17 @@ GMSFAgentAnimationState *gmsf_agent_get_animation_states(GMSFAgent *agent, gsize
 }
 
 GdkPixbuf *gmsf_agent_get_tray_icon(GMSFAgent *agent) {
+	g_return_val_if_fail(agent, NULL);
 	return agent->priv->tray_icon;
 }
 
 gulong gmsf_agent_get_audio_count(GMSFAgent *agent) {
+	g_return_val_if_fail(agent, 0);
 	return agent->priv->audios_sz;
 }
 
 SNDFILE *gmsf_agent_open_audio(GMSFAgent *agent, guint index, SF_INFO *sfinfo) {
+	g_return_val_if_fail(agent, NULL);
 	fseek(agent->priv->f, agent->priv->audios[index].offset, SEEK_SET);
 	return sf_open_virtual(&agent->priv->audio_io, SFM_READ, sfinfo, &agent->priv->audios[index]);
 }
@@ -810,7 +853,9 @@ guint8 *_raw8_to_bmp(const guint8 *data, guint16 width, guint16 height, const GM
 
 GdkPixbuf *gmsf_agent_get_image(GMSFAgent *agent, guint index) {
 	GdkPixbuf *ret;
-	
+
+	g_return_val_if_fail(agent, NULL);
+
 	ret = g_hash_table_lookup(agent->priv->img_cache, GUINT_TO_POINTER(index));
 	if (!ret) {
 		GdkPixbuf *old;
@@ -873,5 +918,6 @@ GdkPixbuf *gmsf_agent_get_image(GMSFAgent *agent, guint index) {
 }
 
 gulong gmsf_agent_get_image_count(GMSFAgent *agent) {
+	g_return_val_if_fail(agent, 0);
 	return g_hash_table_size(agent->priv->img_locators);
 }
