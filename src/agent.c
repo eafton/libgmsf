@@ -7,8 +7,6 @@
 #include "util.h"
 
 /* TODO: 
- * -Properites
- * -Image regions
  * -Animations */
  
 typedef struct {
@@ -49,7 +47,8 @@ struct _GMSFAgentPrivate {
 	gulong img_info_locator[2];
 	GHashTable *img_locators;
 	GHashTable *img_cache;
-
+	GHashTable *img_regions;
+	
 	gulong aud_info_locator[2];
 	gulong audios_sz;
 	GMSFAgentAudio *audios;
@@ -61,6 +60,29 @@ struct _GMSFAgentPrivate {
 
 enum {
 	PROP_FILENAME = 1,
+	PROP_FLAGS,
+	PROP_VERSION_MAJOR,
+	PROP_VERSION_MINOR,
+	PROP_ANIMATION_SET_VERSION_MAJOR,
+	PROP_ANIMATION_SET_VERSION_MINOR,
+	PROP_WIDTH,
+	PROP_HEIGHT,
+	PROP_GUID,
+	PROP_TRAY_ICON,
+
+	/* Do we expose these as properties? Should they be GVariants? */
+	PROP_LOCALIZED_INFO,
+	PROP_LOCALIZED_LANGUAGES,
+	PROP_VOICE_INFO,
+	PROP_VOICE_BALLOON_INFO,
+	PROP_ANIMATION_STATES,
+	
+	/* Not sure how to expose audio as properties... */
+	PROP_AUDIO,
+
+	/* Not sure how to expose image list as properties,  GVariant array of Pixbufs? */
+	PROP_IMAGE,
+	PROP_IMAGE_REGION
 };
 
 G_DEFINE_TYPE(GMSFAgent, gmsf_agent, G_TYPE_OBJECT)
@@ -296,6 +318,14 @@ static void free_localized_info(gpointer data) {
 	g_free(info);
 }
 
+static void free_region(gpointer data) {
+	GMSFRegion *r;
+	
+	r = data;
+	g_free(r->rects);
+	g_free(r);
+}
+
 static gchar *read_string(FILE *handle) {
 	gchar *ret;
 	guint16 *str;
@@ -333,6 +363,7 @@ static gchar *read_guid(FILE *handle) {
 
 static void _finalize(GObject *object) {
 	GMSFAgent *agent;
+	guint i;
 	
 	agent = GMSF_AGENT(object);
 
@@ -362,9 +393,14 @@ static void _finalize(GObject *object) {
 	
 	g_hash_table_destroy(agent->priv->img_locators);
 	g_hash_table_destroy(agent->priv->img_cache);
+	g_hash_table_destroy(agent->priv->img_regions);
 
 	g_free(agent->priv->audios);
 
+	for (i = 0; i < agent->priv->states_sz; i++) {
+		g_free(agent->priv->states[i].name);
+		g_strfreev(agent->priv->states[i].anims);
+	}
 	g_free(agent->priv->states);
 
     G_OBJECT_CLASS(gmsf_agent_parent_class)->finalize(object);
@@ -392,6 +428,32 @@ static void _get_property(GObject *object, guint prop_id, GValue *value, GParamS
 		case PROP_FILENAME:
 			g_value_set_string(value, agent->priv->filename);
 			break;
+		case PROP_FLAGS:
+			g_value_set_flags(value, agent->priv->flags);
+			break;
+		case PROP_VERSION_MAJOR:
+			g_value_set_uint(value, agent->priv->version_major);
+			break;
+		case PROP_VERSION_MINOR:
+			g_value_set_uint(value, agent->priv->version_minor);
+			break;
+		case PROP_ANIMATION_SET_VERSION_MAJOR:
+			g_value_set_uint(value, agent->priv->animset_version_major);
+			break;
+		case PROP_ANIMATION_SET_VERSION_MINOR:
+			g_value_set_uint(value, agent->priv->animset_version_minor);
+			break;
+		case PROP_WIDTH:
+			g_value_set_uint(value, agent->priv->width);
+			break;
+		case PROP_HEIGHT:
+			g_value_set_uint(value, agent->priv->height);
+			break;
+		case PROP_GUID:
+			g_value_set_string(value, agent->priv->guid);
+			break;
+		case PROP_TRAY_ICON:
+			g_value_set_object(value, agent->priv->tray_icon);
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -643,6 +705,15 @@ static void gmsf_agent_class_init(GMSFAgentClass *klass) {
 	g_class->constructed = _constructed;
 
     g_object_class_install_property(g_class, PROP_FILENAME, g_param_spec_string("filename", "nick", "blurb", NULL, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+	g_object_class_install_property(g_class, PROP_FLAGS, g_param_spec_flags("flags", "nick", "blurb", G_TYPE_FLAGS, GMSF_AGENT_FLAGS_NONE, G_PARAM_READABLE));
+	g_object_class_install_property(g_class, PROP_VERSION_MAJOR, g_param_spec_uint("version-major", "nick", "blurb", 0, G_MAXUINT, 100, G_PARAM_READABLE));
+    g_object_class_install_property(g_class, PROP_VERSION_MINOR, g_param_spec_uint("version-minor", "nick", "blurb", 0, G_MAXUINT, 100, G_PARAM_READABLE));
+    g_object_class_install_property(g_class, PROP_ANIMATION_SET_VERSION_MAJOR, g_param_spec_uint("animset-version-major", "nick", "blurb", 0, G_MAXUINT, 100, G_PARAM_READABLE));
+    g_object_class_install_property(g_class, PROP_ANIMATION_SET_VERSION_MINOR, g_param_spec_uint("animset-version-minor", "nick", "blurb", 0, G_MAXUINT, 100, G_PARAM_READABLE));
+    g_object_class_install_property(g_class, PROP_WIDTH, g_param_spec_uint("width", "nick", "blurb", 0, G_MAXUINT, 100, G_PARAM_READABLE));
+    g_object_class_install_property(g_class, PROP_HEIGHT, g_param_spec_uint("height", "nick", "blurb", 0, G_MAXUINT, 100, G_PARAM_READABLE));
+    g_object_class_install_property(g_class, PROP_GUID, g_param_spec_string("guid", "nick", "blurb", NULL, G_PARAM_READABLE));
+    g_object_class_install_property(g_class, PROP_TRAY_ICON, g_param_spec_object("tray-icon", "nick", "blurb", GDK_TYPE_PIXBUF, G_PARAM_READABLE));
 
 	g_type_class_add_private(klass, sizeof(GMSFAgentPrivate));
 }	
@@ -655,6 +726,7 @@ static void gmsf_agent_init(GMSFAgent *agent) {
 	
 	agent->priv->img_locators = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
 	agent->priv->img_cache = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)gdk_pixbuf_unref);
+	agent->priv->img_regions = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, free_region);
 	
 	agent->priv->audio_io.get_filelen = vio_get_len;
 	agent->priv->audio_io.seek = vio_seek;
@@ -921,4 +993,70 @@ GdkPixbuf *gmsf_agent_get_image(GMSFAgent *agent, guint index) {
 gulong gmsf_agent_get_image_count(GMSFAgent *agent) {
 	g_return_val_if_fail(agent, 0);
 	return g_hash_table_size(agent->priv->img_locators);
+}
+
+GMSFRegion *gmsf_agent_get_image_region(GMSFAgent *agent, guint index) {
+	GMSFRegion *ret;
+
+	g_return_val_if_fail(agent, NULL);
+	ret = g_hash_table_lookup(agent->priv->img_regions, GUINT_TO_POINTER(index));
+	if (!ret) {
+		gpointer c, d;
+		guint32 *locator;
+		guint32 ul, ul2;
+		gint32 l;
+		guint i;
+		
+		locator = g_hash_table_lookup(agent->priv->img_locators, GUINT_TO_POINTER(index));
+		if (!locator) {
+			return NULL;
+		}
+
+		fseek(agent->priv->f, locator[0] + 6, SEEK_SET);
+		fread(&ul, sizeof(guint32), 1, agent->priv->f);
+		fseek(agent->priv->f, GUINT32_FROM_LE(ul), SEEK_CUR);
+		fread(&ul, sizeof(guint32), 1, agent->priv->f);
+		fread(&ul2, sizeof(guint32), 1, agent->priv->f);
+		ul = GUINT32_FROM_LE(ul);
+		
+		c = g_malloc(ul);
+		d = g_malloc(GUINT32_FROM_LE(ul2));
+		fread(c, 1, ul, agent->priv->f);
+		decompressor(c, d);
+		g_free(c);
+		
+		memcpy(&ul, d + 4, sizeof(guint32));
+		g_assert(GUINT32_FROM_LE(ul) == 1);
+
+		ret = g_new(GMSFRegion, 1);
+		memcpy(&ul, d + 8, sizeof(guint32));
+		ret->rects_sz = GUINT32_FROM_LE(ul);
+		memcpy(&l, d + 16, sizeof(gint32));
+		ret->bbox.x = GINT32_FROM_LE(l);
+		memcpy(&l, d + 20, sizeof(gint32));
+		ret->bbox.y = GINT32_FROM_LE(l);
+		memcpy(&l, d + 24, sizeof(gint32));
+		ret->bbox.width = GINT32_FROM_LE(l) - ret->bbox.x;
+		memcpy(&l, d + 28, sizeof(gint32));
+		ret->bbox.height = GINT32_FROM_LE(l) - ret->bbox.y;
+			
+		memcpy(&ul, d, sizeof(guint32));
+		ul = GUINT32_FROM_LE(ul);
+		ret->rects = g_new(GMSFRectangle, ret->rects_sz);
+		for (i = 0; i < ret->rects_sz; i++) {
+			memcpy(&l, d + ul + (16 * i), sizeof(gint32));
+			ret->rects[i].x = GINT32_FROM_LE(l);
+			memcpy(&l, d + ul + (16 * i) + 4, sizeof(gint32));
+			ret->rects[i].y = GINT32_FROM_LE(l);
+			memcpy(&l, d + ul + (16 * i) + 8, sizeof(gint32));
+			ret->rects[i].width = GINT32_FROM_LE(l) - ret->rects[i].x;
+			memcpy(&l, d + ul + (16 * i) + 12, sizeof(gint32));
+			ret->rects[i].height = GINT32_FROM_LE(l) - ret->rects[i].y;
+		}
+		
+		g_hash_table_insert(agent->priv->img_regions, GUINT_TO_POINTER(index), ret);
+		g_free(d);
+	}
+	
+	return ret;
 }

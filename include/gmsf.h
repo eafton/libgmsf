@@ -180,6 +180,12 @@ typedef struct _GMSFAgentClass GMSFAgentClass;
 typedef struct _GMSFAgentPrivate GMSFAgentPrivate;
 
 typedef struct {
+	GMSFRectangle *rects;
+	gsize rects_sz;
+	GMSFRectangle bbox;
+} GMSFRegion;
+
+typedef struct {
 	gchar *name;
 	gchar *desc;
 	gchar *extra;
@@ -239,7 +245,6 @@ struct _GMSFAgentClass {
 
 GMSF_EXPORT GType gmsf_agent_get_type(void) G_GNUC_CONST;
 GMSF_EXPORT GMSFAgent *gmsf_agent_new_from_file(const gchar *file);
-
 GMSF_EXPORT GMSFAgentFlags gmsf_agent_get_flags(GMSFAgent *agent);
 GMSF_EXPORT void gmsf_agent_get_animation_set_version(GMSFAgent *agent, gushort *maj, gushort *min);
 GMSF_EXPORT void gmsf_agent_get_version(GMSFAgent *agent, gushort *maj, gushort *min);
@@ -254,6 +259,7 @@ GMSF_EXPORT GdkPixbuf *gmsf_agent_get_tray_icon(GMSFAgent *agent);
 GMSF_EXPORT gulong gmsf_agent_get_audio_count(GMSFAgent *agent);
 GMSF_EXPORT SNDFILE *gmsf_agent_open_audio(GMSFAgent *agent, guint index, SF_INFO *sfinfo);
 GMSF_EXPORT GdkPixbuf *gmsf_agent_get_image(GMSFAgent *agent, guint index);
+GMSF_EXPORT GMSFRegion *gmsf_agent_get_image_region(GMSFAgent *agent, guint index);
 GMSF_EXPORT gulong gmsf_agent_get_image_count(GMSFAgent *agent);
 
 /* TODO */
