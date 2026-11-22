@@ -10,6 +10,11 @@
  * -Animations */
  
 typedef struct {
+	gchar *name;
+	gulong locator[2];
+} GMSFAgentAnimOffset;
+
+typedef struct {
 	GMSFAgentPrivate *priv;
 	gsize sz, offset;
 } GMSFAgentAudio;
@@ -56,6 +61,8 @@ struct _GMSFAgentPrivate {
 	
 	GMSFAgentAnimationState *states;
 	gushort states_sz;
+	
+	GHashTable *anims;
 };
 
 enum {
@@ -113,18 +120,15 @@ static void decompressor(gpointer in, gpointer out) {
     guint8 *dst;
     gsize out_pos;
 
-    g_return_if_fail(in != NULL);
-    g_return_if_fail(out != NULL);
-
+    g_return_if_fail(in);
+    g_return_if_fail(out);
     src = (const guint8 *)in;
     dst = (guint8 *)out;
-    g_return_if_fail(src[0] == 0x00);
-
+    g_return_if_fail(!src[0]);
     reader.data = src;
     reader.byte_pos = 1;
     reader.bit_pos = 0;
     out_pos = 0;
-
     while (TRUE) {
         guint32 type_bit;
 
@@ -462,6 +466,7 @@ static void _get_property(GObject *object, guint prop_id, GValue *value, GParamS
 
 static void _constructed(GObject *object) {
 	GMSFAgent *agent;
+	GMSFAgentAnimOffset *anim_offsets;
 	guint16 uspair[2];
 	guint16 us;
 	guint32 locator[2];
@@ -692,6 +697,31 @@ static void _constructed(GObject *object) {
 
 		g_hash_table_insert(agent->priv->img_locators, GUINT_TO_POINTER(i), lctr);
 	}
+	
+	fseek(agent->priv->f, agent->priv->anim_info_locator[0], SEEK_SET);
+	fread(&ul, sizeof(guint32), 1, agent->priv->f);
+	ul = GUINT32_FROM_LE(ul);
+	anim_offsets = g_new(GMSFAgentAnimOffset, ul);
+	for (i = 0; i < ul; i++) {		
+		anim_offsets[i].name = read_string(agent->priv->f);
+		fread(locator, sizeof(guint32), 2, agent->priv->f);
+		anim_offsets[i].locator[0] = GUINT32_FROM_LE(locator[0]);
+		anim_offsets[i].locator[1] = GUINT32_FROM_LE(locator[1]);
+	}
+	
+	for (i = 0; i < ul; i++) {		
+		GMSFAgentAnimation *anim;
+	
+		fseek(agent->priv->f, anim_offsets[i].locator[0], SEEK_SET);	
+		anim = g_new(GMSFAgentAnimation, 1);
+		anim->name = anim_offsets[i].name;
+		anim->name_upper = read_string(agent->priv->f);
+		fread(&anim->transition_type, 1, 1, agent->priv->f);
+		anim->return_anim = read_string(agent->priv->f);
+		printf("%s %s\n", anim->name, anim->name_upper);
+	}
+	g_free(anim_offsets);
+
 }
 
 static void gmsf_agent_class_init(GMSFAgentClass *klass) {
@@ -728,6 +758,8 @@ static void gmsf_agent_init(GMSFAgent *agent) {
 	agent->priv->img_cache = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)gdk_pixbuf_unref);
 	agent->priv->img_regions = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, free_region);
 	
+	agent->priv->anims = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
+
 	agent->priv->audio_io.get_filelen = vio_get_len;
 	agent->priv->audio_io.seek = vio_seek;
 	agent->priv->audio_io.read = vio_read;

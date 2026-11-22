@@ -196,6 +196,19 @@ typedef struct {
 	gchar **anims; /* NULL terminated */
 } GMSFAgentAnimationState;
 
+typedef enum {
+	GMSF_AGENT_ANIMATION_TRANSITION_USE_RETURN_ANIMATION = 0x00,
+	GMSF_AGENT_ANIMATION_TRANSITION_USE_EXIT_BRANCHES = 0x01,
+	GMSF_AGENT_ANIMATION_TRANSITION_NO_TRANSITION = 0x02
+} GMSFAgentAnimationTransition;
+
+typedef struct {
+	gchar *name;
+	gchar *name_upper;
+	GMSFAgentAnimationTransition transition_type;
+	gchar *return_anim;
+} GMSFAgentAnimation;
+
 typedef struct {
 	gchar *engine_guid;
 	gchar *mode_guid;
