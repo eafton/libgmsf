@@ -197,16 +197,67 @@ typedef struct {
 } GMSFAgentAnimationState;
 
 typedef enum {
-	GMSF_AGENT_ANIMATION_TRANSITION_USE_RETURN_ANIMATION = 0x00,
-	GMSF_AGENT_ANIMATION_TRANSITION_USE_EXIT_BRANCHES = 0x01,
-	GMSF_AGENT_ANIMATION_TRANSITION_NO_TRANSITION = 0x02
+	GMSF_AGENT_ANIMATION_TRANSITION_RETURN_ANIMATION = 0x00,
+	GMSF_AGENT_ANIMATION_TRANSITION_EXIT_BRANCHES = 0x01,
+	GMSF_AGENT_ANIMATION_TRANSITION_NONE = 0x02
 } GMSFAgentAnimationTransition;
+
+typedef enum {
+	GMSF_AGENT_ANIMATION_OVERLAY_TYPE_MOUTH_CLOSED = 0x00,
+	GMSF_AGENT_ANIMATION_OVERLAY_TYPE_MOUTH_WIDE_OPEN_1 = 0x01,
+	GMSF_AGENT_ANIMATION_OVERLAY_TYPE_MOUTH_WIDE_OPEN_2 = 0x02,
+	GMSF_AGENT_ANIMATION_OVERLAY_TYPE_MOUTH_WIDE_OPEN_3 = 0x03,
+	GMSF_AGENT_ANIMATION_OVERLAY_TYPE_MOUTH_WIDE_OPEN_4 = 0x04,
+	GMSF_AGENT_ANIMATION_OVERLAY_TYPE_MOUTH_MEDIUM = 0x05,
+	GMSF_AGENT_ANIMATION_OVERLAY_TYPE_MOUTH_NARROW = 0x06
+} GMSFAgentAnimationOverlayType;
+
+typedef enum {
+    GMSF_AGENT_ANIMATION_OVERLAY_FLAGS_NONE = 0,
+    GMSF_AGENT_ANIMATION_OVERLAY_FLAG_REPLACE_TOP_IMAGE = 1,
+    GMSF_AGENT_ANIMATION_OVERLAY_FLAG_HAS_REGION_DATA = 2,
+} GMSFAgentAnimationOverlayFlags;
+
+typedef struct {
+	gulong i;
+	gshort x, y;
+} GMSFAgentAnimationFrameImage;
+
+typedef struct {
+	gshort jump_i, probability;
+} GMSFAgentAnimationBranchInfo;
+
+typedef struct {
+	GMSFAgentAnimationOverlayType type;
+	GMSFAgentAnimationOverlayFlags flags;
+	gushort image_i;
+	GMSFRectangle rect;
+	GMSFRegion *region;
+} GMSFAgentAnimationOverlayInfo;
+
+typedef struct {
+	GMSFAgentAnimationFrameImage *images;
+	gsize images_sz;
+	
+	gushort audio_i;
+	gushort duration;
+	gshort exit_to_i;
+	
+	GMSFAgentAnimationBranchInfo *branches;
+	gsize branches_sz;
+	
+	GMSFAgentAnimationOverlayInfo *overlays;
+	gsize overlays_sz;
+} GMSFAgentAnimationFrameInfo;
 
 typedef struct {
 	gchar *name;
 	gchar *name_upper;
 	GMSFAgentAnimationTransition transition_type;
 	gchar *return_anim;
+	
+	GMSFAgentAnimationFrameInfo *frames;
+	gsize frames_sz;
 } GMSFAgentAnimation;
 
 typedef struct {

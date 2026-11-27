@@ -5,9 +5,6 @@
 #include <sndfile.h>
 #include <gmsf.h>
 #include "util.h"
-
-/* TODO: 
- * -Animations */
  
 typedef struct {
 	gchar *name;
@@ -243,6 +240,44 @@ static sf_count_t vio_seek(sf_count_t offset, int whence, void *udata) {
 	return rel_pos;
 }
 
+static GMSFRegion *parse_region(gpointer d) {
+	GMSFRegion *ret;
+	guint32 ul, ul2;
+	gint32 l;
+	guint i;
+
+	memcpy(&ul, d + 4, sizeof(guint32));
+	g_assert(GUINT32_FROM_LE(ul) == 1);
+
+	ret = g_new(GMSFRegion, 1);
+	memcpy(&ul, d + 8, sizeof(guint32));
+	ret->rects_sz = GUINT32_FROM_LE(ul);
+	memcpy(&l, d + 16, sizeof(gint32));
+	ret->bbox.x = GINT32_FROM_LE(l);
+	memcpy(&l, d + 20, sizeof(gint32));
+	ret->bbox.y = GINT32_FROM_LE(l);
+	memcpy(&l, d + 24, sizeof(gint32));
+	ret->bbox.width = GINT32_FROM_LE(l) - ret->bbox.x;
+	memcpy(&l, d + 28, sizeof(gint32));
+	ret->bbox.height = GINT32_FROM_LE(l) - ret->bbox.y;
+			
+	memcpy(&ul, d, sizeof(guint32));
+	ul = GUINT32_FROM_LE(ul);
+	ret->rects = g_new(GMSFRectangle, ret->rects_sz);
+	for (i = 0; i < ret->rects_sz; i++) {
+		memcpy(&l, d + ul + (16 * i), sizeof(gint32));
+		ret->rects[i].x = GINT32_FROM_LE(l);
+		memcpy(&l, d + ul + (16 * i) + 4, sizeof(gint32));
+		ret->rects[i].y = GINT32_FROM_LE(l);
+		memcpy(&l, d + ul + (16 * i) + 8, sizeof(gint32));
+		ret->rects[i].width = GINT32_FROM_LE(l) - ret->rects[i].x;
+		memcpy(&l, d + ul + (16 * i) + 12, sizeof(gint32));
+		ret->rects[i].height = GINT32_FROM_LE(l) - ret->rects[i].y;
+	}
+	
+	return ret;
+}
+
 static sf_count_t vio_read(void *ptr, sf_count_t count, void *udata) {
 	GMSFAgentAudio *audio;
 	sf_count_t rel_pos, remaining;
@@ -469,6 +504,7 @@ static void _constructed(GObject *object) {
 	GMSFAgentAnimOffset *anim_offsets;
 	guint16 uspair[2];
 	guint16 us;
+	gint16 s;
 	guint32 locator[2];
 	guint32 magic;
 	guint32 localized_info_offset;
@@ -698,6 +734,9 @@ static void _constructed(GObject *object) {
 		g_hash_table_insert(agent->priv->img_locators, GUINT_TO_POINTER(i), lctr);
 	}
 	
+	/* TODO: animation loading like images, read from disk when requested then cache into hashtable */
+	
+#if 0
 	fseek(agent->priv->f, agent->priv->anim_info_locator[0], SEEK_SET);
 	fread(&ul, sizeof(guint32), 1, agent->priv->f);
 	ul = GUINT32_FROM_LE(ul);
@@ -711,17 +750,65 @@ static void _constructed(GObject *object) {
 	
 	for (i = 0; i < ul; i++) {		
 		GMSFAgentAnimation *anim;
-	
+		guint j;
+		
 		fseek(agent->priv->f, anim_offsets[i].locator[0], SEEK_SET);	
 		anim = g_new(GMSFAgentAnimation, 1);
 		anim->name = anim_offsets[i].name;
 		anim->name_upper = read_string(agent->priv->f);
-		fread(&anim->transition_type, 1, 1, agent->priv->f);
+		fread(&uc, sizeof(guint8), 1, agent->priv->f);
+		anim->transition_type = uc;
 		anim->return_anim = read_string(agent->priv->f);
-		printf("%s %s\n", anim->name, anim->name_upper);
+		
+		fread(&us, sizeof(guint16), 1, agent->priv->f);
+		anim->frames_sz = GUINT16_FROM_LE(us);
+		anim->frames = g_new(GMSFAgentAnimationFrameInfo, anim->frames_sz);
+		for (j = 0; j < anim->frames_sz; j++) {		
+			guint k;
+			
+			fread(&us, sizeof(guint16), 1, agent->priv->f);
+			anim->frames[j].images_sz = GUINT16_FROM_LE(us);
+			anim->frames[j].images = g_new(GMSFAgentAnimationFrameImage, anim->frames[j].images_sz);
+			for (k = 0; k < anim->frames[j].images_sz; k++) {		
+				fread(&ul2, sizeof(guint32), 1, agent->priv->f);
+				anim->frames[j].images[k].i = GUINT32_FROM_LE(ul2);
+				fread(&s, sizeof(gint16), 1, agent->priv->f);
+				anim->frames[j].images[k].x = GINT16_FROM_LE(s);
+				fread(&s, sizeof(gint16), 1, agent->priv->f);
+				anim->frames[j].images[k].y = GINT16_FROM_LE(s);
+			}
+	
+			fread(&us, sizeof(guint16), 1, agent->priv->f);
+			anim->frames[j].audio_i = GUINT16_FROM_LE(us);
+			fread(&us, sizeof(guint16), 1, agent->priv->f);
+			anim->frames[j].duration = GUINT16_FROM_LE(us);
+			fread(&s, sizeof(gint16), 1, agent->priv->f);
+			anim->frames[j].exit_to_i = GINT16_FROM_LE(s);
+
+			fread(&uc, sizeof(guint8), 1, agent->priv->f);
+			anim->frames[j].branches_sz = uc;
+			anim->frames[j].branches = g_new(GMSFAgentAnimationBranchInfo, anim->frames[j].branches_sz);
+			for (k = 0; k < anim->frames[j].branches_sz; k++) {		
+				fread(&us, sizeof(guint16), 1, agent->priv->f);
+				anim->frames[j].branches[k].jump_i = GUINT16_FROM_LE(us);
+				fread(&us, sizeof(guint16), 1, agent->priv->f);
+				anim->frames[j].branches[k].probability = GUINT16_FROM_LE(us);
+			}
+			
+			fread(&uc, sizeof(guint8), 1, agent->priv->f);
+			anim->frames[j].overlays_sz = uc;
+			anim->frames[j].overlays = g_new(GMSFAgentAnimationBranchInfo, anim->frames[j].branches_sz);
+			for (k = 0; k < anim->frames[j].branches_sz; k++) {		
+				fread(&us, sizeof(guint16), 1, agent->priv->f);
+				anim->frames[j].branches[k].jump_i = GUINT16_FROM_LE(us);
+				fread(&us, sizeof(guint16), 1, agent->priv->f);
+				anim->frames[j].branches[k].probability = GUINT16_FROM_LE(us);
+			}
+
+		}
 	}
 	g_free(anim_offsets);
-
+#endif 
 }
 
 static void gmsf_agent_class_init(GMSFAgentClass *klass) {
@@ -770,7 +857,6 @@ static void gmsf_agent_init(GMSFAgent *agent) {
 GMSFAgent *gmsf_agent_new_from_file(const gchar *file) {
 	return g_object_new(GMSF_TYPE_AGENT, "filename", file, NULL);	
 }
-
 
 GMSFAgentFlags gmsf_agent_get_flags(GMSFAgent *agent) {
 	g_return_val_if_fail(agent, GMSF_AGENT_FLAGS_NONE);
@@ -1036,8 +1122,6 @@ GMSFRegion *gmsf_agent_get_image_region(GMSFAgent *agent, guint index) {
 		gpointer c, d;
 		guint32 *locator;
 		guint32 ul, ul2;
-		gint32 l;
-		guint i;
 		
 		locator = g_hash_table_lookup(agent->priv->img_locators, GUINT_TO_POINTER(index));
 		if (!locator) {
@@ -1057,34 +1141,7 @@ GMSFRegion *gmsf_agent_get_image_region(GMSFAgent *agent, guint index) {
 		decompressor(c, d);
 		g_free(c);
 		
-		memcpy(&ul, d + 4, sizeof(guint32));
-		g_assert(GUINT32_FROM_LE(ul) == 1);
-
-		ret = g_new(GMSFRegion, 1);
-		memcpy(&ul, d + 8, sizeof(guint32));
-		ret->rects_sz = GUINT32_FROM_LE(ul);
-		memcpy(&l, d + 16, sizeof(gint32));
-		ret->bbox.x = GINT32_FROM_LE(l);
-		memcpy(&l, d + 20, sizeof(gint32));
-		ret->bbox.y = GINT32_FROM_LE(l);
-		memcpy(&l, d + 24, sizeof(gint32));
-		ret->bbox.width = GINT32_FROM_LE(l) - ret->bbox.x;
-		memcpy(&l, d + 28, sizeof(gint32));
-		ret->bbox.height = GINT32_FROM_LE(l) - ret->bbox.y;
-			
-		memcpy(&ul, d, sizeof(guint32));
-		ul = GUINT32_FROM_LE(ul);
-		ret->rects = g_new(GMSFRectangle, ret->rects_sz);
-		for (i = 0; i < ret->rects_sz; i++) {
-			memcpy(&l, d + ul + (16 * i), sizeof(gint32));
-			ret->rects[i].x = GINT32_FROM_LE(l);
-			memcpy(&l, d + ul + (16 * i) + 4, sizeof(gint32));
-			ret->rects[i].y = GINT32_FROM_LE(l);
-			memcpy(&l, d + ul + (16 * i) + 8, sizeof(gint32));
-			ret->rects[i].width = GINT32_FROM_LE(l) - ret->rects[i].x;
-			memcpy(&l, d + ul + (16 * i) + 12, sizeof(gint32));
-			ret->rects[i].height = GINT32_FROM_LE(l) - ret->rects[i].y;
-		}
+		ret = parse_region(d);
 		
 		g_hash_table_insert(agent->priv->img_regions, GUINT_TO_POINTER(index), ret);
 		g_free(d);
